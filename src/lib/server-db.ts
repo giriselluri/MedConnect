@@ -1,0 +1,1493 @@
+import fs from 'fs';
+import path from 'path';
+import {
+  Profile,
+  Specialty,
+  Post,
+  Comment,
+  CaseStudy,
+  Group,
+  Connection,
+  Bookmark,
+  AISession,
+  ContentReport,
+  ConnectionStatus,
+  CaseStudyStatus,
+} from '@/types';
+
+const DATA_DIR = path.join(process.cwd(), '.data');
+const DB_FILE = path.join(DATA_DIR, 'medconnect_db.json');
+
+export interface DatabaseState {
+  specialties: Specialty[];
+  profiles: Profile[];
+  profile_specialties: { profile_id: string; specialty_id: string; is_primary?: boolean }[];
+  posts: Post[];
+  post_likes: { post_id: string; user_id: string; created_at: string }[];
+  comments: Comment[];
+  case_studies: CaseStudy[];
+  groups: Group[];
+  group_members: { group_id: string; user_id: string; role: string; joined_at: string }[];
+  connections: Connection[];
+  follows: { follower_id: string; following_id: string; created_at: string }[];
+  bookmarks: Bookmark[];
+  ai_sessions: AISession[];
+  content_reports: ContentReport[];
+  current_user_id: string; // for demo switching
+}
+
+const INITIAL_SPECIALTIES: Specialty[] = [
+  { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine', description: 'Cardiovascular diseases, interventions, and electrophysiology', icon: 'Heart' },
+  { id: 'oncology', name: 'Oncology', category: 'Clinical Medicine', description: 'Medical, surgical, and radiation oncology therapeutics', icon: 'ShieldAlert' },
+  { id: 'neurology', name: 'Neurology', category: 'Clinical Medicine', description: 'Brain, spinal cord, and neurodegenerative disorders', icon: 'Brain' },
+  { id: 'pediatrics', name: 'Pediatrics', category: 'Clinical Medicine', description: 'Childhood development and pediatric acute/chronic illnesses', icon: 'Baby' },
+  { id: 'dermatology', name: 'Dermatology', category: 'Clinical Medicine', description: 'Cutaneous pathology, inflammatory skin diseases, and dermato-oncology', icon: 'Sparkles' },
+  { id: 'internal_medicine', name: 'Internal Medicine', category: 'Clinical Medicine', description: 'Adult primary care, multisystem chronic illness, and hospital medicine', icon: 'Stethoscope' },
+  { id: 'radiology', name: 'Radiology', category: 'Diagnostic', description: 'Diagnostic imaging, MRI, CT, and interventional radiology', icon: 'ScanLine' },
+  { id: 'immunology', name: 'Immunology & Allergy', category: 'Clinical Medicine', description: 'Autoimmune diseases, immunotherapies, and allergic reactions', icon: 'Shield' },
+  { id: 'endocrinology', name: 'Endocrinology', category: 'Clinical Medicine', description: 'Metabolic diseases, diabetes care, and thyroid pathology', icon: 'Activity' },
+  { id: 'emergency_medicine', name: 'Emergency Medicine', category: 'Acute Care', description: 'Trauma, critical resuscitation, and acute emergency care', icon: 'Ambulance' },
+  { id: 'gastroenterology', name: 'Gastroenterology', category: 'Clinical Medicine', description: 'GI tract diseases, hepatology, and endoscopy', icon: 'Microscope' },
+  { id: 'psychiatry', name: 'Psychiatry', category: 'Behavioral Health', description: 'Mental health disorders, neuropsychiatry, and psychotherapy', icon: 'Smile' },
+  { id: 'pulmonology', name: 'Pulmonology', category: 'Clinical Medicine', description: 'Respiratory illnesses, critical care ventilation, and sleep medicine', icon: 'Wind' },
+  { id: 'nephrology', name: 'Nephrology', category: 'Clinical Medicine', description: 'Renal diseases, dialysis, and electrolyte disorders', icon: 'Droplet' },
+  { id: 'orthopedics', name: 'Orthopedic Surgery', category: 'Surgical', description: 'Musculoskeletal trauma, arthroplasty, and sports medicine', icon: 'Bone' },
+];
+
+const INITIAL_PROFILES: Profile[] = [
+  {
+    id: '00000000-0000-0000-0000-000000000001',
+    email: 'sarah.jenkins@medconnect.local',
+    full_name: 'Dr. Sarah Jenkins, MD, FACP',
+    title: 'Chief Medical Officer & Clinical Administrator',
+    role: 'admin',
+    institution: 'Metropolitan Academic Health System',
+    location: 'Boston, MA',
+    bio: 'Cardiovascular specialist and healthcare administrator passionate about evidence-based clinical leadership, hospital quality improvement, and interdisciplinary collaboration.',
+    avatar_url: 'https://images.unsplash.com/photo-1594824813629-4d6f43694f4c?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 21,
+    qualifications: ['MD - Harvard Medical School', 'FACP - Fellow American College of Physicians', 'Executive Healthcare Leadership - MIT'],
+    interests: ['Clinical Governance', 'Health Systems Engineering', 'Cardiovascular Prevention', 'AI in Clinical Triage'],
+    is_admin: true,
+    is_verified: true,
+    connections_count: 482,
+    created_at: new Date(Date.now() - 365 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000002',
+    email: 'marcus.chen@medconnect.local',
+    full_name: 'Dr. Marcus Chen, MD, FACC',
+    title: 'Attending Interventional Cardiologist',
+    role: 'healthcare_professional',
+    institution: 'St. Jude Heart and Vascular Institute',
+    location: 'San Francisco, CA',
+    bio: 'Specializing in complex coronary interventions, transcatheter aortic valve replacement (TAVR), and intravascular imaging (OCT/IVUS). Dedicated to medical education and clinical trial mentorship.',
+    avatar_url: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 14,
+    qualifications: ['MD - Johns Hopkins University', 'FACC - Fellow American College of Cardiology', 'Interventional Fellowship - Cleveland Clinic'],
+    interests: ['Transcatheter Valve Therapies', 'Intravascular Ultrasound', 'Cardiogenic Shock', 'Digital Stethoscopes'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 340,
+    created_at: new Date(Date.now() - 300 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000003',
+    email: 'aris.thorne@medconnect.local',
+    full_name: 'Dr. Aris Thorne, MD',
+    title: 'Associate Professor & Medical Oncologist',
+    role: 'healthcare_professional',
+    institution: 'Memorial Cancer Center',
+    location: 'New York, NY',
+    bio: 'Investigating novel immune checkpoint inhibitor combinations and targeted therapies for advanced melanoma and non-small cell lung cancer (NSCLC).',
+    avatar_url: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 11,
+    qualifications: ['MD - Columbia Vagelos College of Physicians', 'Hematology/Oncology Fellowship - Memorial Sloan Kettering'],
+    interests: ['Immune Checkpoint Blockade', 'Liquid Biopsies', 'Precision Oncology', 'Clinical Trial Design'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 295,
+    created_at: new Date(Date.now() - 250 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000004',
+    email: 'sophia.vance@medconnect.local',
+    full_name: 'Dr. Sophia Vance, MD, PhD',
+    title: 'Neurocritical Care Specialist & Assistant Professor',
+    role: 'healthcare_professional',
+    institution: 'Boston Neurological Institute',
+    location: 'Boston, MA',
+    bio: 'Translational clinician-scientist caring for critically ill neurological patients with subarachnoid hemorrhage, refractory status epilepticus, and severe traumatic brain injury.',
+    avatar_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 9,
+    qualifications: ['MD/PhD - Stanford University', 'Neurocritical Care - Mass General Brigham'],
+    interests: ['Neurovascular Dynamics', 'Continuous EEG Monitoring', 'Targeted Temperature Management'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 215,
+    created_at: new Date(Date.now() - 200 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000005',
+    email: 'amara.okafor@medconnect.local',
+    full_name: 'Dr. Amara Okafor, MD, FAAP',
+    title: 'Pediatric Pulmonologist',
+    role: 'healthcare_professional',
+    institution: 'Children’s National Hospital',
+    location: 'Washington, DC',
+    bio: 'Caring for pediatric patients with cystic fibrosis, severe refractory asthma, and congenital bronchopulmonary dysplasia. Advocate for pediatric global health equity.',
+    avatar_url: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 8,
+    qualifications: ['MD - Yale School of Medicine', 'FAAP - Fellow American Academy of Pediatrics', 'Pediatric Pulmonology - Children’s Hospital of Philadelphia'],
+    interests: ['Cystic Fibrosis Modulators', 'Pediatric Aerosol Delivery', 'Rare Lung Diseases'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 188,
+    created_at: new Date(Date.now() - 180 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000006',
+    email: 'julian.martinez@medconnect.local',
+    full_name: 'Dr. Julian Martinez, MD, FAAD',
+    title: 'Dermatopathologist & Clinical Assistant Professor',
+    role: 'healthcare_professional',
+    institution: 'Pacific Skin Health Institute',
+    location: 'San Diego, CA',
+    bio: 'Bridging clinical dermatology with histopathologic biopsy interpretation. Focused on early dermoscopic recognition of atypical melanocytic neoplasms.',
+    avatar_url: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 12,
+    qualifications: ['MD - UCLA David Geffen School of Medicine', 'FAAD - Fellow American Academy of Dermatology', 'Dermatopathology Fellowship - UCSF'],
+    interests: ['Dermoscopy', 'Melanocytic Lesions', 'Inflammatory Dermatoses', 'Teledermatology'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 310,
+    created_at: new Date(Date.now() - 170 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000007',
+    email: 'priya.nair@medconnect.local',
+    full_name: 'Dr. Priya Nair, MD',
+    title: 'Hospitalist & Academic Internal Medicine',
+    role: 'healthcare_professional',
+    institution: 'Metro Health Systems',
+    location: 'Chicago, IL',
+    bio: 'Practicing inpatient general internal medicine with a clinical focus on multisystem geriatric care, point-of-care ultrasound (POCUS), and diagnostic stewardship.',
+    avatar_url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 7,
+    qualifications: ['MD - Northwestern Feinberg', 'Residency - Rush University Medical Center'],
+    interests: ['Point-of-Care Ultrasound (POCUS)', 'Diagnostic Stewardship', 'Sepsis Resuscitation Protocols'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 175,
+    created_at: new Date(Date.now() - 150 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000008',
+    email: 'elena.rostova@medconnect.local',
+    full_name: 'Dr. Elena Rostova, PhD',
+    title: 'Principal Investigator in Molecular Genomics',
+    role: 'researcher',
+    institution: 'Broad Institute of MIT and Harvard',
+    location: 'Cambridge, MA',
+    bio: 'Leading wet-lab and computational pipelines deciphering tumor clonal heterogeneity and single-cell RNA sequencing signatures in therapy-resistant carcinomas.',
+    avatar_url: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 10,
+    qualifications: ['PhD in Computational Biology - Oxford University', 'Postdoc Fellow - Broad Institute'],
+    interests: ['Single-Cell Genomics', 'CRISPR Functional Screens', 'Cancer Clonal Evolution'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 260,
+    created_at: new Date(Date.now() - 140 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000009',
+    email: 'alex.rivera@medconnect.local',
+    full_name: 'Alex Rivera, MS',
+    title: 'Fourth-Year Medical Student (MS4)',
+    role: 'medical_student',
+    institution: 'Johns Hopkins University School of Medicine',
+    location: 'Baltimore, MD',
+    bio: 'Applying for Internal Medicine / Cardiology residency match. Co-author on 3 peer-reviewed abstracts in cardiac MRI and non-invasive hemodynamic monitoring.',
+    avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 3,
+    qualifications: ['BS in Biomedical Engineering - Duke University', 'MD Candidate - Johns Hopkins (Class of 2027)'],
+    interests: ['Cardiology Fellowship Prep', 'Cardiac Hemodynamics', 'POCUS Training', 'Medical Education'],
+    is_admin: false,
+    is_verified: false,
+    connections_count: 120,
+    created_at: new Date(Date.now() - 100 * 86400000).toISOString(),
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000010',
+    email: 'david.vance@medconnect.local',
+    full_name: 'David Vance, PharmD, BCPS',
+    title: 'Senior Director of Medical Affairs',
+    role: 'pharmaceutical_professional',
+    institution: 'BioVance Therapeutics',
+    location: 'Philadelphia, PA',
+    bio: 'Overseeing medical science liaison (MSL) operations and phase III clinical registries in novel biologic therapies for rare rheumatologic and immunologic conditions.',
+    avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+    years_of_experience: 15,
+    qualifications: ['PharmD - University of North Carolina Chapel Hill', 'BCPS - Board Certified Pharmacotherapy Specialist'],
+    interests: ['Health Economics & Outcomes Research (HEOR)', 'Biologics & Biosimilars', 'Medical Science Liaison Strategy'],
+    is_admin: false,
+    is_verified: true,
+    connections_count: 410,
+    created_at: new Date(Date.now() - 90 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_PROFILE_SPECIALTIES = [
+  { profile_id: '00000000-0000-0000-0000-000000000001', specialty_id: 'internal_medicine', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000001', specialty_id: 'cardiology', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000002', specialty_id: 'cardiology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000002', specialty_id: 'internal_medicine', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000003', specialty_id: 'oncology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000003', specialty_id: 'immunology', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000004', specialty_id: 'neurology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000005', specialty_id: 'pediatrics', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000005', specialty_id: 'pulmonology', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000006', specialty_id: 'dermatology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000007', specialty_id: 'internal_medicine', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000007', specialty_id: 'emergency_medicine', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000008', specialty_id: 'oncology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000008', specialty_id: 'immunology', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000009', specialty_id: 'cardiology', is_primary: true },
+  { profile_id: '00000000-0000-0000-0000-000000000009', specialty_id: 'internal_medicine', is_primary: false },
+  { profile_id: '00000000-0000-0000-0000-000000000010', specialty_id: 'immunology', is_primary: true },
+];
+
+const INITIAL_GROUPS: Group[] = [
+  {
+    id: '10000000-0000-0000-0000-000000000001',
+    name: 'Cardiology Clinical Exchange',
+    slug: 'cardiology-clinical-exchange',
+    description: 'A collaborative forum for cardiologists, fellows, and cardiac surgeons to review hemodynamic tracings, complex ECGs, structural heart interventions, and guideline updates.',
+    banner_url: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'cardiology',
+    topic_tags: ['ECG', 'TAVR', 'HeartFailure', 'Electrophysiology'],
+    members_count: 1420,
+    created_at: new Date(Date.now() - 180 * 86400000).toISOString(),
+  },
+  {
+    id: '10000000-0000-0000-0000-000000000002',
+    name: 'Oncology Research & Precision Therapeutics',
+    slug: 'oncology-research',
+    description: 'Peer group discussing clinical trials, ADC mechanisms, NGS liquid biopsy panels, and immunotherapy resistance in modern medical oncology.',
+    banner_url: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'oncology',
+    topic_tags: ['Immunotherapy', 'ADCs', 'PrecisionMedicine', 'ClinicalTrials'],
+    members_count: 980,
+    created_at: new Date(Date.now() - 170 * 86400000).toISOString(),
+  },
+  {
+    id: '10000000-0000-0000-0000-000000000003',
+    name: 'Clinical Research & Trial Methodologies',
+    slug: 'clinical-research',
+    description: 'Dedicated to biostatistics, regulatory protocols, FDA/EMA submission frameworks, and pragmatic clinical trial designs.',
+    banner_url: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'internal_medicine',
+    topic_tags: ['Biostatistics', 'TrialDesign', 'Regulatory', 'Ethics'],
+    members_count: 740,
+    created_at: new Date(Date.now() - 160 * 86400000).toISOString(),
+  },
+  {
+    id: '10000000-0000-0000-0000-000000000004',
+    name: 'Pharmaceutical Industry & Medical Affairs',
+    slug: 'pharmaceutical-industry',
+    description: 'Connecting MSLs, medical directors, and drug developers discussing phase I-IV pipelines, HEOR data, and global scientific dissemination.',
+    banner_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'immunology',
+    topic_tags: ['MedicalAffairs', 'HEOR', 'Biosimilars', 'Pharmacovigilance'],
+    members_count: 620,
+    created_at: new Date(Date.now() - 150 * 86400000).toISOString(),
+  },
+  {
+    id: '10000000-0000-0000-0000-000000000005',
+    name: 'Medical Students & Residents Circle',
+    slug: 'medical-students',
+    description: 'A safe, supportive space for medical students and resident trainees to share high-yield clinical pearls, USMLE/shelf exam advice, and residency interview tips.',
+    banner_url: 'https://images.unsplash.com/photo-1581056771107-24ca5f033842?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'internal_medicine',
+    topic_tags: ['MedEd', 'ResidencyMatch', 'ClinicalPearls', 'StudyGroups'],
+    members_count: 1150,
+    created_at: new Date(Date.now() - 140 * 86400000).toISOString(),
+  },
+  {
+    id: '10000000-0000-0000-0000-000000000006',
+    name: 'Healthcare AI & Digital Health Innovation',
+    slug: 'healthcare-ai',
+    description: 'Exploring validated applications of generative AI, ambient clinical documentation, automated diagnostic imaging, and predictive risk stratification models.',
+    banner_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800',
+    specialty_id: 'radiology',
+    topic_tags: ['GenerativeAI', 'AmbientDictation', 'ImagingAI', 'EHRIntegration'],
+    members_count: 1840,
+    created_at: new Date(Date.now() - 130 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_CASE_STUDIES: CaseStudy[] = [
+  {
+    id: '20000000-0000-0000-0000-000000000001',
+    title: 'Acute Coronary Syndrome with Multivessel Disease in an Elderly Patient',
+    short_summary: 'Illustrative case exploring hemodynamic stabilization, timing of revascularization, and antiplatelet stewardship in non-ST-elevation myocardial infarction.',
+    educational_content: `### Clinical Presentation
+An illustrative 74-year-old male presents to the emergency department with 3 hours of substernal pressure radiating to the left arm accompanied by diaphoresis. Prior history includes type 2 diabetes mellitus, hypertension, and stage 3a chronic kidney disease.
+
+### Diagnostic Evaluation
+- **ECG:** 1.5mm horizontal ST-segment depressions in leads V4-V6 and leads II, III, aVF.
+- **Cardiac Troponin I:** 0.84 ng/mL on arrival, rising to 3.42 ng/mL at 2 hours.
+- **Bedside Echo:** Preserved EF of 50% with hypokinesis of the inferolateral wall.
+
+### Management & Clinical Decision-Making
+The patient was stratified as high-risk NSTE-ACS requiring invasive angiography within 24 hours. The angiography demonstrated severe 85% proximal LAD stenosis, 90% mid-RCA stenosis, and diffuse 70% LCx disease with a Syntax score of 24.
+
+Following Heart Team consultation, multivessel PCI with drug-eluting stents was performed under intravascular ultrasound (IVUS) guidance to minimize iodinated contrast exposure given baseline renal impairment.
+
+### Outcome & Teaching Pearls
+Post-procedure courses remained uneventful with stable renal parameters. The patient was discharged on dual antiplatelet therapy (aspirin + clopidogrel), high-intensity atorvastatin, and guideline-directed medical therapy.`,
+    learning_objectives: [
+      'Distinguish ischemic risk vs. bleeding risk when choosing P2Y12 inhibitors in elderly patients with chronic kidney disease',
+      'Analyze the role of intravascular imaging (IVUS/OCT) in optimizing stent expansion and minimizing contrast nephropathy',
+      'Understand the indications for Heart Team consultation in multivessel CAD',
+    ],
+    source_references: [
+      'ACC/AHA Guideline for the Management of Patients with Non-ST-Elevation Acute Coronary Syndromes',
+      'ESC Guidelines for the management of acute coronary syndromes (2023)',
+      'Nephrotoxicity reduction strategies during percutaneous coronary intervention',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000002',
+    author_name: 'Dr. Marcus Chen, MD, FACC',
+    author_title: 'Attending Interventional Cardiologist',
+    status: 'published',
+    published_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+    views_count: 428,
+    bookmarks_count: 64,
+    specialties: [
+      { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine' },
+      { id: 'internal_medicine', name: 'Internal Medicine', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 4 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000002',
+    title: 'Management of Immune-Related Colitis Following Dual Checkpoint Inhibition',
+    short_summary: 'Educational case study on timely diagnosis and steroid-sparing biologic intervention in grade 3 CTLA-4/PD-1 mediated immune-related adverse events.',
+    educational_content: `### Clinical Scenario
+A 62-year-old patient with metastatic melanoma receiving second-cycle combination ipilimumab plus nivolumab presents with severe watery diarrhea (7 episodes daily above baseline), diffuse cramping abdominal pain, and low-grade pyrexia.
+
+### Diagnostic Workup
+- **Stool Diagnostics:** Negative for Clostridioides difficile, bacterial pathogens, ova and parasites.
+- **Laboratory:** Fecal calprotectin elevated to 840 mcg/g; serum CRP 48 mg/L.
+- **Flexible Sigmoidoscopy:** Revealed continuous mucosal erythema, loss of vascular pattern, and deep ulcerations in the rectosigmoid junction consistent with grade 3 immune-related colitis.
+
+### Therapeutic Strategy
+Immune checkpoint blockade was immediately withheld. High-dose intravenous methylprednisolone (1 mg/kg/day) was initiated. After 72 hours without adequate clinical symptom improvement, steroid-refractory colitis was diagnosed.
+
+Infliximab (5 mg/kg) was promptly administered, resulting in resolution of cramping and reduction of bowel movements to baseline within 48 hours.
+
+### Key Educational Takeaways
+Early endoscopic evaluation within 48-72 hours confirms histological diagnosis and rules out alternative etiologies. Prompt escalation to infliximab or vedolizumab prevents bowel perforation and steroid dependence.`,
+    learning_objectives: [
+      'Recognize the severity grading of immune-related diarrhea and enterocolitis',
+      'Formulate a steroid escalation and biologic rescue protocol for steroid-refractory irAEs',
+      'Evaluate the risks and benefits of checkpoint rechallenge versus permanent cessation',
+    ],
+    source_references: [
+      'ASCO Management of Immune-Related Adverse Events in Patients Treated with Immune Checkpoint Inhibitor Therapy',
+      'NCCN Clinical Practice Guidelines in Oncology: Management of Immunotherapy-Related Toxicities',
+      'Lancet Oncology: Biological rescue in refractory checkpoint enterocolitis',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000003',
+    author_name: 'Dr. Aris Thorne, MD',
+    author_title: 'Associate Professor & Medical Oncologist',
+    status: 'published',
+    published_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+    views_count: 380,
+    bookmarks_count: 51,
+    specialties: [
+      { id: 'oncology', name: 'Oncology', category: 'Clinical Medicine' },
+      { id: 'immunology', name: 'Immunology & Allergy', category: 'Clinical Medicine' },
+      { id: 'gastroenterology', name: 'Gastroenterology', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 6 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000003',
+    title: 'Rapid Progression of Bilateral Facial Palsy and Paresthesia in Guillain-Barré Syndrome',
+    short_summary: 'Diagnostic nuances of acute inflammatory demyelinating polyneuropathy variant presenting with prominent cranial nerve involvement.',
+    educational_content: `### Clinical Presentation
+A 36-year-old female presents with bilateral facial weakness and progressive distal paresthesias in both hands and feet 12 days after a mild diarrheal illness caused by Campylobacter jejuni.
+
+### Physical Findings
+- Bilateral lower motor neuron facial nerve palsy (inability to close eyelids fully or smile symmetrically).
+- Deep tendon reflexes were globally absent in lower extremities and diminished in upper extremities.
+- Preserved sensation to light touch with mild stocking-glove vibration decrement.
+
+### Diagnostics & Hospital Course
+- **Lumbar Puncture:** Albuminocytological dissociation (CSF protein 128 mg/dL, WBC 2 cells/mcL).
+- **NCS/EMG:** Prolonged distal motor latencies and absent F-waves consistent with demyelinating neuropathy.
+
+### Treatment
+Intravenous immunoglobulin (IVIg 0.4 g/kg/day for 5 consecutive days) was initiated promptly. Forced vital capacity (FVC) and negative inspiratory force (NIF) were trended every 4 hours in the neuro-ICU. Neurological recovery began at day 10, with significant facial motor return at 6-week follow-up.`,
+    learning_objectives: [
+      'Identify albuminocytological dissociation in cerebrospinal fluid',
+      'Manage respiratory failure risk through serial bedside spirometry monitoring (20/30/40 rule)',
+      'Compare IVIg versus therapeutic plasma exchange in acute GBS',
+    ],
+    source_references: [
+      'AAN Practice Guideline: Immunotherapy for Guillain-Barré Syndrome',
+      'NEJM: Diagnosis and Management of Guillain-Barré Syndrome',
+      'Critical Care Neurology: Monitoring respiratory mechanics in neuromuscular weakness',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000004',
+    author_name: 'Dr. Sophia Vance, MD, PhD',
+    author_title: 'Neurocritical Care Specialist',
+    status: 'published',
+    published_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+    views_count: 512,
+    bookmarks_count: 77,
+    specialties: [
+      { id: 'neurology', name: 'Neurology', category: 'Clinical Medicine' },
+      { id: 'emergency_medicine', name: 'Emergency Medicine', category: 'Acute Care' },
+    ],
+    created_at: new Date(Date.now() - 8 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000004',
+    title: 'Atypical Kawasaki Disease in an Infant with Prolonged Fever and Rash',
+    short_summary: 'Navigating diagnostic dilemmas in incomplete Kawasaki disease and coronary artery aneurysm prevention in pediatric practice.',
+    educational_content: `### Case Overview
+A 7-month-old infant presents with 6 days of remittent fever up to 39.8°C, irritability, non-purulent bilateral conjunctivitis, and induration of both hands without strawberry tongue or cervical lymphadenopathy.
+
+### Workup
+- **ESR:** 88 mm/hr, **CRP:** 92 mg/L.
+- **Platelets:** 520,000/mcL.
+- **Echocardiogram:** Prominent left main coronary artery ectasia with a Z-score of +2.8.
+
+### Clinical Management
+The diagnosis of incomplete/atypical Kawasaki disease was made. High-dose IVIg (2 g/kg single infusion over 12 hours) and medium-dose aspirin were administered immediately. Fever remitted within 14 hours. Repeat echocardiogram at 6 weeks demonstrated normal coronary lumen dimensions.`,
+    learning_objectives: [
+      'Recognize atypical/incomplete Kawasaki disease diagnostic algorithm in infants under 12 months',
+      'Apply echocardiographic Z-score criteria to assess coronary artery dilation',
+      'Review indications for repeat IVIg and adjunct corticosteroids in resistant cases',
+    ],
+    source_references: [
+      'AHA Scientific Statement: Diagnosis, Treatment, and Long-Term Management of Kawasaki Disease',
+      'Pediatrics: Incomplete Kawasaki Disease Clinical Guidelines',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000005',
+    author_name: 'Dr. Amara Okafor, MD, FAAP',
+    author_title: 'Pediatric Pulmonologist',
+    status: 'published',
+    published_at: new Date(Date.now() - 9 * 86400000).toISOString(),
+    views_count: 340,
+    bookmarks_count: 44,
+    specialties: [
+      { id: 'pediatrics', name: 'Pediatrics', category: 'Clinical Medicine' },
+      { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 9 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000005',
+    title: 'Subacute Cutaneous Lupus Erythematosus Triggered by Proton Pump Inhibitors',
+    short_summary: 'Diagnostic recognition of drug-induced SCLE, serological anti-Ro/SSA antibody testing, and drug cessation recovery.',
+    educational_content: `### Clinical Presentation
+A 58-year-old female presents with an annular, polycyclic erythematous eruption across the upper chest, shoulders, and dorsal arms that developed 6 weeks after initiating omeprazole for gastroesophageal reflux disease.
+
+### Diagnostic Findings
+- **Serology:** Anti-Ro/SSA strongly positive (>8.0 AI); Anti-La negative; ANA 1:160 speckled; normal complement C3 and C4.
+- **Punch Biopsy:** Vacuolar interface dermatitis, apoptotic keratinocytes, and dermal mucin deposition.
+
+### Resolution
+Omeprazole was discontinued and replaced with famotidine. Topical triamcinolone and strict photoprotection were prescribed. Complete cutaneous clearance occurred within 8 weeks without systemic organ involvement.`,
+    learning_objectives: [
+      'List pharmacological culprits commonly implicated in drug-induced SCLE',
+      'Differentiate SCLE from polymorphic light eruption, tinea corporis, and erythema annulare centrifugum',
+      'Guide patients on photoprotection and safe alternative pharmacotherapy',
+    ],
+    source_references: [
+      'Journal of the American Academy of Dermatology: Drug-induced subacute cutaneous lupus',
+      'British Journal of Dermatology: Cutaneous lupus erythematosus clinical update',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000006',
+    author_name: 'Dr. Julian Martinez, MD, FAAD',
+    author_title: 'Dermatopathologist',
+    status: 'published',
+    published_at: new Date(Date.now() - 11 * 86400000).toISOString(),
+    views_count: 290,
+    bookmarks_count: 38,
+    specialties: [
+      { id: 'dermatology', name: 'Dermatology', category: 'Clinical Medicine' },
+      { id: 'immunology', name: 'Immunology & Allergy', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 12 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 11 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000006',
+    title: 'Severe Sepsis from Community-Acquired Klebsiella Pneumoniae in Poorly Controlled Diabetes',
+    short_summary: 'Point-of-care lung ultrasound stewardship, early goal resuscitation, and glycemic stabilization in diabetic bacteremia.',
+    educational_content: `### Clinical Presentation
+A 53-year-old male with HbA1c of 11.2% presents with high fever, rigors, cough with red currant jelly sputum, and altered mental status. Blood pressure 84/48 mmHg, heart rate 124 bpm, oxygen saturation 89% on ambient air.
+
+### Clinical Management
+Bedside lung ultrasound demonstrated extensive right upper lobe consolidation with dynamic air bronchograms and B-lines. Fluid resuscitation with balanced crystalloids was instituted and intravenous ceftriaxone plus azithromycin initiated within 45 minutes of arrival.
+
+Blood and sputum cultures confirmed hypervirulent Klebsiella pneumoniae sensitive to cephalosporins. After hemodynamic stabilization, continuous regular insulin infusion normalized hyperglycemia. The patient was stepped down to oral fluoroquinolones to complete a 14-day course.`,
+    learning_objectives: [
+      'Deploy bedside POCUS in rapid hypoxemia and sepsis source identification',
+      'Review antibiotic spectrum choices in diabetic patients susceptible to encapsulated organisms',
+      'Manage severe hyperglycemia during septic stress state',
+    ],
+    source_references: [
+      'Surviving Sepsis Campaign: International Guidelines for Management of Sepsis and Septic Shock 2021',
+      'Chest: Point-of-Care Ultrasonography in Respiratory Failure',
+    ],
+    author_id: '00000000-0000-0000-0000-000000000007',
+    author_name: 'Dr. Priya Nair, MD',
+    author_title: 'Hospitalist & Academic Internal Medicine',
+    status: 'published',
+    published_at: new Date(Date.now() - 14 * 86400000).toISOString(),
+    views_count: 460,
+    bookmarks_count: 59,
+    specialties: [
+      { id: 'internal_medicine', name: 'Internal Medicine', category: 'Clinical Medicine' },
+      { id: 'pulmonology', name: 'Pulmonology', category: 'Clinical Medicine' },
+      { id: 'endocrinology', name: 'Endocrinology', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 15 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 14 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000007',
+    title: '[DRAFT] Novel Biomarkers in Early Lung Adenocarcinoma Detection',
+    short_summary: 'Internal draft investigating circulating tumor DNA methylation signatures in stage I NSCLC screening protocols.',
+    educational_content: 'Under active clinical peer review before publication approval. Content reflects preliminary single-center retrospective observational findings.',
+    learning_objectives: [
+      'Evaluate circulating cfDNA methylation panels',
+      'Assess false-positive rates against low-dose spiral CT',
+    ],
+    source_references: ['Preliminary trial data - Internal hospital registry'],
+    author_id: '00000000-0000-0000-0000-000000000001',
+    author_name: 'Dr. Sarah Jenkins, MD, FACP',
+    author_title: 'Chief Medical Officer & Clinical Administrator',
+    status: 'draft',
+    published_at: null,
+    views_count: 12,
+    bookmarks_count: 0,
+    specialties: [
+      { id: 'oncology', name: 'Oncology', category: 'Clinical Medicine' },
+      { id: 'pulmonology', name: 'Pulmonology', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: '20000000-0000-0000-0000-000000000008',
+    title: '[ARCHIVED] Historical Evaluation of Digoxin Protocols in Heart Failure (1998-2005)',
+    short_summary: 'Archived historical reference case superseded by current SGLT2i and ARNI guideline-directed medical therapy.',
+    educational_content: 'This historical case has been archived in favor of modern 2023 ACC/AHA guidelines for HFrEF quadruple therapy.',
+    learning_objectives: [
+      'Understand historical digoxin monitoring',
+      'Compare with modern GDMT quadruple therapy',
+    ],
+    source_references: ['DIG Trial 1997', 'ACC/AHA 2005 Guideline Archive'],
+    author_id: '00000000-0000-0000-0000-000000000001',
+    author_name: 'Dr. Sarah Jenkins, MD, FACP',
+    author_title: 'Chief Medical Officer & Clinical Administrator',
+    status: 'archived',
+    published_at: new Date(Date.now() - 60 * 86400000).toISOString(),
+    views_count: 95,
+    bookmarks_count: 3,
+    specialties: [
+      { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine' },
+    ],
+    created_at: new Date(Date.now() - 65 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 60 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_POSTS: Post[] = [
+  {
+    id: '30000000-0000-0000-0000-000000000001',
+    author_id: '00000000-0000-0000-0000-000000000002',
+    author: INITIAL_PROFILES[1],
+    content: `In interventional cardiology, timing and physiological lesion assessment dictate long-term stent patency. We recently reviewed 12-month outcomes following intravascular ultrasound (IVUS)-guided vs. angiography-guided PCI in complex bifurcations.\n\nThe routine application of high-definition IVUS significantly lowered target lesion failure (TLF) from 7.1% to 3.8% (p=0.008). Ensuring minimum stent area (MSA) >5.5 mm² in the ostial LAD is one of the single most protective clinical steps we can take in the cath lab.\n\nColleagues: what is your current institutional threshold for post-dilatation in non-left-main bifurcations?`,
+    article_url: 'https://www.jacc.org/doi/10.1016/j.jacc.2023.08.012',
+    article_title: 'Intravascular Imaging in Complex Coronary Bifurcations: A Multi-Center Registry',
+    article_source: 'Journal of the American College of Cardiology',
+    specialty_id: 'cardiology',
+    specialty: INITIAL_SPECIALTIES[0],
+    topic_tags: ['InterventionalCardiology', 'IVUS', 'CathLabPearls', 'ClinicalOutcomes'],
+    likes_count: 42,
+    comments_count: 2,
+    reposts_count: 8,
+    created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 4 * 3600000).toISOString(),
+    comments: [
+      {
+        id: '40000000-0000-0000-0000-000000000001',
+        post_id: '30000000-0000-0000-0000-000000000001',
+        author_id: '00000000-0000-0000-0000-000000000001',
+        author: INITIAL_PROFILES[0],
+        content: 'Superb analysis Dr. Chen. At our health system, incorporating mandatory IVUS checklists into our electronic registry reduced 30-day readmissions significantly. Quality data is paramount.',
+        created_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+        updated_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+      },
+      {
+        id: '40000000-0000-0000-0000-000000000002',
+        post_id: '30000000-0000-0000-0000-000000000001',
+        author_id: '00000000-0000-0000-0000-000000000007',
+        author: INITIAL_PROFILES[6],
+        content: 'From an inpatient hospitalist perspective, seeing these clear post-PCI parameters helps us guide our transition care and dual antiplatelet counseling before discharge.',
+        created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000002',
+    author_id: '00000000-0000-0000-0000-000000000003',
+    author: INITIAL_PROFILES[2],
+    content: `Exciting phase III data presented at this weekend’s thoracic symposium regarding antibody-drug conjugates (ADCs) in HER2-mutant non-small cell lung cancer.\n\nThe progression-free survival (PFS) hazard ratio of 0.62 against platinum doublets demonstrates that targeted internalization of cytotoxic payloads continues to reshape solid tumor oncology.\n\nCrucial point for oncologists: monitor pulmonary function tests closely, as interstitial lung disease (ILD) remains the most critical class adverse event to identify before progression.`,
+    article_url: 'https://www.thelancet.com/journals/lanonc/article/PIIS1470-2045(23)00412-1/fulltext',
+    article_title: 'Antibody-Drug Conjugates in Advanced Non-Small-Cell Lung Cancer: A Landmark Trial',
+    article_source: 'The Lancet Oncology',
+    specialty_id: 'oncology',
+    specialty: INITIAL_SPECIALTIES[1],
+    topic_tags: ['Oncology', 'ThoracicOncology', 'ADCs', 'PrecisionMedicine'],
+    likes_count: 67,
+    comments_count: 1,
+    reposts_count: 14,
+    created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    comments: [
+      {
+        id: '40000000-0000-0000-0000-000000000003',
+        post_id: '30000000-0000-0000-0000-000000000002',
+        author_id: '00000000-0000-0000-0000-000000000010',
+        author: INITIAL_PROFILES[9],
+        content: 'Strongly agree on ILD pharmacovigilance. In our medical affairs advisory boards, early baseline HRCT scans and rapid corticosteroid tapering protocols were universal recommendations.',
+        created_at: new Date(Date.now() - 18 * 3600000).toISOString(),
+        updated_at: new Date(Date.now() - 18 * 3600000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000003',
+    author_id: '00000000-0000-0000-0000-000000000008',
+    author: INITIAL_PROFILES[7],
+    content: `We just uploaded our preprint on single-cell transcriptional profiling of tertiary lymphoid structures (TLS) in checkpoint-resistant solid tumors.\n\nOur data suggests that localized follicular helper T-cells (Tfh) and CD20+ B-cell cross-talk correlate directly with neoantigen-specific cytotoxic recruitment. We invite peer researchers and clinical oncologists to review the pipeline and collaborate on validation cohorts.`,
+    article_url: 'https://www.nature.com/articles/s41586-024-07112-x',
+    article_title: 'Spatial Transcriptomics Reveals B-Cell Mediated Immunity in Tumor Microenvironments',
+    article_source: 'Nature Medicine',
+    specialty_id: 'oncology',
+    specialty: INITIAL_SPECIALTIES[1],
+    topic_tags: ['Genomics', 'Bioinformatics', 'CancerResearch', 'SingleCell'],
+    likes_count: 39,
+    comments_count: 0,
+    reposts_count: 11,
+    created_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+    comments: [],
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000004',
+    author_id: '00000000-0000-0000-0000-000000000009',
+    author: INITIAL_PROFILES[8],
+    content: `Reflecting on my 4th year sub-internship in the Cardiac Intensive Care Unit (CICU):\n\nUnderstanding Swan-Ganz pulmonary artery catheter waveforms in cardiogenic shock was initially daunting, but correlating hemodynamic tracings with bedside echocardiography brought physiology alive. Invaluable mentoring from Dr. Marcus Chen and the fellowship team!\n\nTo fellow medical students: never hesitate to ask "why" on rounds when hemodynamics do not match the clinical textbook presentation.`,
+    specialty_id: 'cardiology',
+    specialty: INITIAL_SPECIALTIES[0],
+    topic_tags: ['MedEd', 'MedicalStudent', 'CICU', 'CardiologyFellowship'],
+    likes_count: 58,
+    comments_count: 1,
+    reposts_count: 3,
+    created_at: new Date(Date.now() - 72 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 72 * 3600000).toISOString(),
+    comments: [
+      {
+        id: '40000000-0000-0000-0000-000000000004',
+        post_id: '30000000-0000-0000-0000-000000000004',
+        author_id: '00000000-0000-0000-0000-000000000002',
+        author: INITIAL_PROFILES[1],
+        content: 'Proud of your dedication on the unit, Alex. You demonstrated exemplary clinical curiosity and bedside communication. Any residency program will be fortunate to match you.',
+        created_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+        updated_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+      },
+    ],
+  },
+];
+
+const INITIAL_CONNECTIONS: Connection[] = [
+  {
+    id: '50000000-0000-0000-0000-000000000001',
+    requester_id: '00000000-0000-0000-0000-000000000001',
+    recipient_id: '00000000-0000-0000-0000-000000000002',
+    status: 'accepted',
+    created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+  },
+  {
+    id: '50000000-0000-0000-0000-000000000002',
+    requester_id: '00000000-0000-0000-0000-000000000001',
+    recipient_id: '00000000-0000-0000-0000-000000000003',
+    status: 'accepted',
+    created_at: new Date(Date.now() - 25 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 25 * 86400000).toISOString(),
+  },
+  {
+    id: '50000000-0000-0000-0000-000000000003',
+    requester_id: '00000000-0000-0000-0000-000000000004',
+    recipient_id: '00000000-0000-0000-0000-000000000001',
+    status: 'pending',
+    created_at: new Date(Date.now() - 1 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 1 * 86400000).toISOString(),
+  },
+  {
+    id: '50000000-0000-0000-0000-000000000004',
+    requester_id: '00000000-0000-0000-0000-000000000005',
+    recipient_id: '00000000-0000-0000-0000-000000000001',
+    status: 'pending',
+    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_REPORTS: ContentReport[] = [
+  {
+    id: '60000000-0000-0000-0000-000000000001',
+    reporter_id: '00000000-0000-0000-0000-000000000007',
+    content_type: 'post',
+    content_id: '30000000-0000-0000-0000-000000000001',
+    reason: 'Routine peer verification of citation link',
+    status: 'reviewed',
+    created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+    reviewed_at: new Date(Date.now() - 4 * 86400000).toISOString(),
+    reviewed_by: '00000000-0000-0000-0000-000000000001',
+  },
+];
+
+export class ServerDatabase {
+  private static instance: ServerDatabase;
+  private state: DatabaseState;
+
+  private constructor() {
+    this.state = this.loadState();
+  }
+
+  public static getInstance(): ServerDatabase {
+    if (!ServerDatabase.instance) {
+      ServerDatabase.instance = new ServerDatabase();
+    }
+    return ServerDatabase.instance;
+  }
+
+  private loadState(): DatabaseState {
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      if (fs.existsSync(DB_FILE)) {
+        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.error('Error loading DB file, initializing fresh state:', e);
+    }
+
+    const defaultState: DatabaseState = {
+      specialties: INITIAL_SPECIALTIES,
+      profiles: INITIAL_PROFILES,
+      profile_specialties: INITIAL_PROFILE_SPECIALTIES,
+      posts: INITIAL_POSTS,
+      post_likes: [],
+      comments: [
+        INITIAL_POSTS[0].comments![0],
+        INITIAL_POSTS[0].comments![1],
+        INITIAL_POSTS[1].comments![0],
+        INITIAL_POSTS[3].comments![0],
+      ],
+      case_studies: INITIAL_CASE_STUDIES,
+      groups: INITIAL_GROUPS,
+      group_members: [
+        { group_id: '10000000-0000-0000-0000-000000000001', user_id: '00000000-0000-0000-0000-000000000001', role: 'member', joined_at: new Date().toISOString() },
+        { group_id: '10000000-0000-0000-0000-000000000001', user_id: '00000000-0000-0000-0000-000000000002', role: 'admin', joined_at: new Date().toISOString() },
+        { group_id: '10000000-0000-0000-0000-000000000002', user_id: '00000000-0000-0000-0000-000000000003', role: 'admin', joined_at: new Date().toISOString() },
+      ],
+      connections: INITIAL_CONNECTIONS,
+      follows: [],
+      bookmarks: [],
+      ai_sessions: [],
+      content_reports: INITIAL_REPORTS,
+      current_user_id: '00000000-0000-0000-0000-000000000001', // Default to Sarah Jenkins (Admin)
+    };
+
+    this.saveState(defaultState);
+    return defaultState;
+  }
+
+  private saveState(state: DatabaseState) {
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('Error saving DB file:', e);
+    }
+  }
+
+  // --- Auth & Current Session ---
+  public getCurrentUser(): Profile {
+    const profile = this.state.profiles.find((p) => p.id === this.state.current_user_id);
+    if (profile) {
+      return this.enrichProfile(profile);
+    }
+    return this.enrichProfile(this.state.profiles[0]);
+  }
+
+  public switchUser(userId: string): Profile | null {
+    const profile = this.state.profiles.find((p) => p.id === userId);
+    if (!profile) return null;
+    this.state.current_user_id = userId;
+    this.saveState(this.state);
+    return this.enrichProfile(profile);
+  }
+
+  // --- Specialties ---
+  public getSpecialties(): Specialty[] {
+    return this.state.specialties;
+  }
+
+  // --- Profiles ---
+  private enrichProfile(profile: Profile): Profile {
+    const specialtyIds = this.state.profile_specialties
+      .filter((ps) => ps.profile_id === profile.id)
+      .map((ps) => ps.specialty_id);
+    const specialties = this.state.specialties.filter((s) => specialtyIds.includes(s.id));
+    return {
+      ...profile,
+      specialties,
+    };
+  }
+
+  public getProfiles(filters?: { role?: string; specialty?: string; search?: string }): Profile[] {
+    let result = this.state.profiles.map((p) => this.enrichProfile(p));
+
+    if (filters?.role) {
+      result = result.filter((p) => p.role === filters.role);
+    }
+    if (filters?.specialty) {
+      result = result.filter((p) =>
+        p.specialties?.some((s) => s.id === filters.specialty || s.name.toLowerCase() === filters.specialty?.toLowerCase())
+      );
+    }
+    if (filters?.search) {
+      const q = filters.search.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.full_name.toLowerCase().includes(q) ||
+          p.title.toLowerCase().includes(q) ||
+          p.institution?.toLowerCase().includes(q) ||
+          p.bio?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }
+
+  public getProfileById(id: string): Profile | null {
+    const p = this.state.profiles.find((x) => x.id === id);
+    if (!p) return null;
+    return this.enrichProfile(p);
+  }
+
+  public updateProfile(id: string, updates: Partial<Profile>): Profile | null {
+    const idx = this.state.profiles.findIndex((x) => x.id === id);
+    if (idx === -1) return null;
+
+    // Security check: Protect admin flag from unauthorized client escalation
+    const currentUser = this.getCurrentUser();
+    if (updates.is_admin !== undefined && !currentUser.is_admin) {
+      delete updates.is_admin;
+    }
+    if (updates.role !== undefined && updates.role === 'admin' && !currentUser.is_admin) {
+      delete updates.role;
+    }
+
+    this.state.profiles[idx] = {
+      ...this.state.profiles[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    this.saveState(this.state);
+    return this.enrichProfile(this.state.profiles[idx]);
+  }
+
+  // --- Posts ---
+  public getPosts(currentUserId?: string, groupId?: string): Post[] {
+    const effectiveUserId = currentUserId || this.state.current_user_id;
+    let list = this.state.posts;
+    if (groupId) {
+      list = list.filter((p) => p.group_id === groupId);
+    }
+
+    return list
+      .map((post) => {
+        const author = this.getProfileById(post.author_id) || INITIAL_PROFILES[0];
+        const specialty = post.specialty_id ? this.state.specialties.find((s) => s.id === post.specialty_id) : undefined;
+        const postComments = this.state.comments
+          .filter((c) => c.post_id === post.id)
+          .map((c) => ({
+            ...c,
+            author: this.getProfileById(c.author_id) || INITIAL_PROFILES[0],
+          }))
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        const is_liked = this.state.post_likes.some(
+          (l) => l.post_id === post.id && l.user_id === effectiveUserId
+        );
+        const is_bookmarked = this.state.bookmarks.some(
+          (b) => b.user_id === effectiveUserId && b.item_type === 'post' && b.item_id === post.id
+        );
+
+        return {
+          ...post,
+          author,
+          specialty,
+          comments: postComments,
+          comments_count: postComments.length,
+          is_liked,
+          is_bookmarked,
+        };
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public createPost(payload: {
+    content: string;
+    author_id?: string;
+    specialty_id?: string;
+    topic_tags?: string[];
+    article_url?: string;
+    article_title?: string;
+    article_source?: string;
+    group_id?: string;
+  }): Post {
+    const author_id = payload.author_id || this.state.current_user_id;
+    const author = this.getProfileById(author_id) || INITIAL_PROFILES[0];
+    const specialty = payload.specialty_id ? this.state.specialties.find((s) => s.id === payload.specialty_id) : undefined;
+
+    const newPost: Post = {
+      id: `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      author_id,
+      author,
+      content: payload.content,
+      article_url: payload.article_url,
+      article_title: payload.article_title,
+      article_source: payload.article_source,
+      specialty_id: payload.specialty_id,
+      specialty,
+      topic_tags: payload.topic_tags || [],
+      group_id: payload.group_id,
+      likes_count: 0,
+      comments_count: 0,
+      reposts_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      comments: [],
+    };
+
+    this.state.posts.unshift(newPost);
+    this.saveState(this.state);
+    return newPost;
+  }
+
+  public deletePost(id: string, userId: string, isAdmin: boolean): boolean {
+    const post = this.state.posts.find((p) => p.id === id);
+    if (!post) return false;
+    if (post.author_id !== userId && !isAdmin) {
+      throw new Error('Unauthorized to delete this post');
+    }
+    this.state.posts = this.state.posts.filter((p) => p.id !== id);
+    this.state.comments = this.state.comments.filter((c) => c.post_id !== id);
+    this.state.post_likes = this.state.post_likes.filter((l) => l.post_id !== id);
+    this.saveState(this.state);
+    return true;
+  }
+
+  public toggleLikePost(postId: string, userId: string): { likes_count: number; is_liked: boolean } {
+    const post = this.state.posts.find((p) => p.id === postId);
+    if (!post) throw new Error('Post not found');
+
+    const existingIndex = this.state.post_likes.findIndex(
+      (l) => l.post_id === postId && l.user_id === userId
+    );
+
+    let is_liked: boolean;
+    if (existingIndex >= 0) {
+      this.state.post_likes.splice(existingIndex, 1);
+      post.likes_count = Math.max(0, post.likes_count - 1);
+      is_liked = false;
+    } else {
+      this.state.post_likes.push({
+        post_id: postId,
+        user_id: userId,
+        created_at: new Date().toISOString(),
+      });
+      post.likes_count += 1;
+      is_liked = true;
+    }
+    this.saveState(this.state);
+    return { likes_count: post.likes_count, is_liked };
+  }
+
+  public addComment(postId: string, authorId: string, content: string): Comment {
+    const post = this.state.posts.find((p) => p.id === postId);
+    if (!post) throw new Error('Post not found');
+
+    const author = this.getProfileById(authorId) || INITIAL_PROFILES[0];
+    const newComment: Comment = {
+      id: `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      post_id: postId,
+      author_id: authorId,
+      author,
+      content,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.comments.push(newComment);
+    post.comments_count += 1;
+    this.saveState(this.state);
+    return newComment;
+  }
+
+  public deleteComment(commentId: string, userId: string, isAdmin: boolean): boolean {
+    const comment = this.state.comments.find((c) => c.id === commentId);
+    if (!comment) return false;
+    if (comment.author_id !== userId && !isAdmin) {
+      throw new Error('Unauthorized to delete this comment');
+    }
+    this.state.comments = this.state.comments.filter((c) => c.id !== commentId);
+    const post = this.state.posts.find((p) => p.id === comment.post_id);
+    if (post) {
+      post.comments_count = Math.max(0, post.comments_count - 1);
+    }
+    this.saveState(this.state);
+    return true;
+  }
+
+  // --- Case Studies (Critical End-to-End Feature) ---
+  public getCaseStudies(options: {
+    specialtyIds?: string[];
+    search?: string;
+    includeDraftsAndArchived?: boolean;
+    currentUserId?: string;
+    isAdmin?: boolean;
+  }): CaseStudy[] {
+    const effectiveUserId = options.currentUserId || this.state.current_user_id;
+    let list = this.state.case_studies;
+
+    // Rule: Non-admin users see ONLY published case studies
+    if (!options.isAdmin && !options.includeDraftsAndArchived) {
+      list = list.filter((c) => c.status === 'published');
+    }
+
+    // Filter by Specialty IDs (Canonical matching)
+    if (options.specialtyIds && options.specialtyIds.length > 0) {
+      const targetIds = options.specialtyIds.map((s) => s.toLowerCase());
+      list = list.filter((c) =>
+        c.specialties.some(
+          (sp) => targetIds.includes(sp.id.toLowerCase()) || targetIds.includes(sp.name.toLowerCase())
+        )
+      );
+    }
+
+    // Keyword Search
+    if (options.search && options.search.trim().length > 0) {
+      const q = options.search.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.short_summary.toLowerCase().includes(q) ||
+          c.author_name.toLowerCase().includes(q) ||
+          c.educational_content.toLowerCase().includes(q) ||
+          c.specialties.some((s) => s.name.toLowerCase().includes(q))
+      );
+    }
+
+    return list
+      .map((cs) => ({
+        ...cs,
+        is_bookmarked: this.state.bookmarks.some(
+          (b) => b.user_id === effectiveUserId && b.item_type === 'case_study' && b.item_id === cs.id
+        ),
+      }))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public getCaseStudyById(id: string, isAdmin: boolean = false): CaseStudy | null {
+    const cs = this.state.case_studies.find((c) => c.id === id);
+    if (!cs) return null;
+    if (cs.status !== 'published' && !isAdmin) {
+      return null;
+    }
+    return cs;
+  }
+
+  public createCaseStudy(
+    payload: {
+      title: string;
+      short_summary: string;
+      educational_content: string;
+      learning_objectives: string[];
+      source_references: string[];
+      specialty_ids: string[];
+      author_id?: string;
+      status: CaseStudyStatus;
+    },
+    userId: string,
+    isAdmin: boolean
+  ): CaseStudy {
+    if (!isAdmin) {
+      throw new Error('Forbidden: Only administrators can create or publish case studies');
+    }
+
+    const author = this.getProfileById(payload.author_id || userId) || this.getCurrentUser();
+    const specialties = this.state.specialties.filter((s) => payload.specialty_ids.includes(s.id));
+
+    const newCaseStudy: CaseStudy = {
+      id: `case_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: payload.title,
+      short_summary: payload.short_summary,
+      educational_content: payload.educational_content,
+      learning_objectives: payload.learning_objectives,
+      source_references: payload.source_references || [],
+      author_id: author.id,
+      author_name: author.full_name,
+      author_title: author.title,
+      status: payload.status,
+      published_at: payload.status === 'published' ? new Date().toISOString() : null,
+      views_count: 0,
+      bookmarks_count: 0,
+      specialties: specialties.length > 0 ? specialties : [this.state.specialties[0]],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.case_studies.unshift(newCaseStudy);
+    this.saveState(this.state);
+    return newCaseStudy;
+  }
+
+  public updateCaseStudy(
+    id: string,
+    updates: Partial<CaseStudy> & { specialty_ids?: string[] },
+    userId: string,
+    isAdmin: boolean
+  ): CaseStudy {
+    if (!isAdmin) {
+      throw new Error('Forbidden: Only administrators can update case studies');
+    }
+
+    const idx = this.state.case_studies.findIndex((c) => c.id === id);
+    if (idx === -1) throw new Error('Case study not found');
+
+    const existing = this.state.case_studies[idx];
+    let updatedSpecialties = existing.specialties;
+    if (updates.specialty_ids) {
+      updatedSpecialties = this.state.specialties.filter((s) => updates.specialty_ids?.includes(s.id));
+    }
+
+    let published_at = existing.published_at;
+    if (updates.status === 'published' && existing.status !== 'published') {
+      published_at = new Date().toISOString();
+    } else if (updates.status === 'draft' || updates.status === 'archived') {
+      // keep or clear
+    }
+
+    const updated: CaseStudy = {
+      ...existing,
+      ...updates,
+      specialties: updatedSpecialties,
+      published_at,
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.case_studies[idx] = updated;
+    this.saveState(this.state);
+    return updated;
+  }
+
+  public deleteCaseStudy(id: string, userId: string, isAdmin: boolean): boolean {
+    if (!isAdmin) {
+      throw new Error('Forbidden: Only administrators can delete case studies');
+    }
+    const idx = this.state.case_studies.findIndex((c) => c.id === id);
+    if (idx === -1) return false;
+
+    this.state.case_studies.splice(idx, 1);
+    this.saveState(this.state);
+    return true;
+  }
+
+  // --- Groups / Communities ---
+  public getGroups(currentUserId?: string): Group[] {
+    const effectiveUserId = currentUserId || this.state.current_user_id;
+    return this.state.groups.map((group) => {
+      const specialty = group.specialty_id ? this.state.specialties.find((s) => s.id === group.specialty_id) : undefined;
+      const is_member = this.state.group_members.some(
+        (gm) => gm.group_id === group.id && gm.user_id === effectiveUserId
+      );
+      const members_count = this.state.group_members.filter((gm) => gm.group_id === group.id).length + group.members_count;
+      return {
+        ...group,
+        specialty,
+        is_member,
+        members_count,
+      };
+    });
+  }
+
+  public getGroupBySlug(slug: string, currentUserId?: string): Group | null {
+    const group = this.state.groups.find((g) => g.slug === slug || g.id === slug);
+    if (!group) return null;
+    const effectiveUserId = currentUserId || this.state.current_user_id;
+    const specialty = group.specialty_id ? this.state.specialties.find((s) => s.id === group.specialty_id) : undefined;
+    const is_member = this.state.group_members.some(
+      (gm) => gm.group_id === group.id && gm.user_id === effectiveUserId
+    );
+    const members_count = this.state.group_members.filter((gm) => gm.group_id === group.id).length + group.members_count;
+    return {
+      ...group,
+      specialty,
+      is_member,
+      members_count,
+    };
+  }
+
+  public toggleJoinGroup(groupId: string, userId: string): { is_member: boolean; members_count: number } {
+    const group = this.state.groups.find((g) => g.id === groupId);
+    if (!group) throw new Error('Group not found');
+
+    const existingIdx = this.state.group_members.findIndex(
+      (gm) => gm.group_id === groupId && gm.user_id === userId
+    );
+
+    let is_member: boolean;
+    if (existingIdx >= 0) {
+      this.state.group_members.splice(existingIdx, 1);
+      is_member = false;
+    } else {
+      this.state.group_members.push({
+        group_id: groupId,
+        user_id: userId,
+        role: 'member',
+        joined_at: new Date().toISOString(),
+      });
+      is_member = true;
+    }
+    this.saveState(this.state);
+    const members_count = this.state.group_members.filter((gm) => gm.group_id === groupId).length + group.members_count;
+    return { is_member, members_count };
+  }
+
+  // --- Connections & Follows ---
+  public getConnections(userId: string): {
+    connections: Connection[];
+    pendingIncoming: Connection[];
+    pendingOutgoing: Connection[];
+  } {
+    const connections: Connection[] = [];
+    const pendingIncoming: Connection[] = [];
+    const pendingOutgoing: Connection[] = [];
+
+    for (const c of this.state.connections) {
+      const requester = this.getProfileById(c.requester_id) || undefined;
+      const recipient = this.getProfileById(c.recipient_id) || undefined;
+      const enriched: Connection = { ...c, requester, recipient };
+
+      if (c.status === 'accepted' && (c.requester_id === userId || c.recipient_id === userId)) {
+        connections.push(enriched);
+      } else if (c.status === 'pending') {
+        if (c.recipient_id === userId) {
+          pendingIncoming.push(enriched);
+        } else if (c.requester_id === userId) {
+          pendingOutgoing.push(enriched);
+        }
+      }
+    }
+
+    return { connections, pendingIncoming, pendingOutgoing };
+  }
+
+  public sendConnectionRequest(requesterId: string, recipientId: string): Connection {
+    if (requesterId === recipientId) {
+      throw new Error('Cannot send connection request to yourself');
+    }
+
+    const existing = this.state.connections.find(
+      (c) =>
+        (c.requester_id === requesterId && c.recipient_id === recipientId) ||
+        (c.requester_id === recipientId && c.recipient_id === requesterId)
+    );
+
+    if (existing) {
+      if (existing.status === 'accepted') throw new Error('Already connected');
+      if (existing.status === 'pending') throw new Error('Connection request already exists');
+      existing.status = 'pending';
+      existing.updated_at = new Date().toISOString();
+      this.saveState(this.state);
+      return existing;
+    }
+
+    const newConnection: Connection = {
+      id: `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      requester_id: requesterId,
+      recipient_id: recipientId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.connections.push(newConnection);
+    this.saveState(this.state);
+    return newConnection;
+  }
+
+  public updateConnectionStatus(connectionId: string, status: ConnectionStatus, userId: string): Connection {
+    const conn = this.state.connections.find((c) => c.id === connectionId);
+    if (!conn) throw new Error('Connection not found');
+
+    if (conn.recipient_id !== userId && conn.requester_id !== userId) {
+      throw new Error('Unauthorized');
+    }
+
+    conn.status = status;
+    conn.updated_at = new Date().toISOString();
+
+    if (status === 'accepted') {
+      const p1 = this.state.profiles.find((p) => p.id === conn.requester_id);
+      const p2 = this.state.profiles.find((p) => p.id === conn.recipient_id);
+      if (p1) p1.connections_count = (p1.connections_count || 0) + 1;
+      if (p2) p2.connections_count = (p2.connections_count || 0) + 1;
+    }
+
+    this.saveState(this.state);
+    return conn;
+  }
+
+  // --- Bookmarks ---
+  public getBookmarks(userId: string): Bookmark[] {
+    return this.state.bookmarks.filter((b) => b.user_id === userId);
+  }
+
+  public toggleBookmark(payload: {
+    user_id: string;
+    item_type: 'post' | 'case_study' | 'news' | 'journal';
+    item_id: string;
+    item_title?: string;
+    item_summary?: string;
+    item_url?: string;
+  }): { is_bookmarked: boolean } {
+    const idx = this.state.bookmarks.findIndex(
+      (b) => b.user_id === payload.user_id && b.item_type === payload.item_type && b.item_id === payload.item_id
+    );
+
+    let is_bookmarked: boolean;
+    if (idx >= 0) {
+      this.state.bookmarks.splice(idx, 1);
+      is_bookmarked = false;
+    } else {
+      this.state.bookmarks.push({
+        id: `bm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        user_id: payload.user_id,
+        item_type: payload.item_type,
+        item_id: payload.item_id,
+        item_title: payload.item_title,
+        item_summary: payload.item_summary,
+        item_url: payload.item_url,
+        created_at: new Date().toISOString(),
+      });
+      is_bookmarked = true;
+    }
+    this.saveState(this.state);
+    return { is_bookmarked };
+  }
+
+  // --- AI Sessions ---
+  public getAISessions(userId: string): AISession[] {
+    return this.state.ai_sessions
+      .filter((s) => s.user_id === userId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public saveAISession(session: {
+    user_id: string;
+    title: string;
+    source_text: string;
+    source_url?: string;
+    structured_summary: AISession['structured_summary'];
+  }): AISession {
+    const newSession: AISession = {
+      id: `ai_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      user_id: session.user_id,
+      title: session.title,
+      source_text: session.source_text,
+      source_url: session.source_url,
+      structured_summary: session.structured_summary,
+      created_at: new Date().toISOString(),
+    };
+    this.state.ai_sessions.unshift(newSession);
+    this.saveState(this.state);
+    return newSession;
+  }
+
+  // --- Admin Portal Metrics & Management ---
+  public getAdminMetrics() {
+    const totalUsers = this.state.profiles.length;
+    const totalPosts = this.state.posts.length;
+    const totalCaseStudies = this.state.case_studies.length;
+    const publishedCaseStudies = this.state.case_studies.filter((c) => c.status === 'published').length;
+    const draftCaseStudies = this.state.case_studies.filter((c) => c.status === 'draft').length;
+    const archivedCaseStudies = this.state.case_studies.filter((c) => c.status === 'archived').length;
+    const totalGroups = this.state.groups.length;
+    const pendingReports = this.state.content_reports.filter((r) => r.status === 'pending').length;
+
+    return {
+      totalUsers,
+      totalPosts,
+      totalCaseStudies,
+      publishedCaseStudies,
+      draftCaseStudies,
+      archivedCaseStudies,
+      totalGroups,
+      pendingReports,
+    };
+  }
+
+  public getReports(): ContentReport[] {
+    return this.state.content_reports.map((r) => ({
+      ...r,
+      reporter: this.getProfileById(r.reporter_id) || undefined,
+    }));
+  }
+
+  public updateReportStatus(reportId: string, status: 'reviewed' | 'dismissed' | 'action_taken', adminId: string): ContentReport {
+    const report = this.state.content_reports.find((r) => r.id === reportId);
+    if (!report) throw new Error('Report not found');
+    report.status = status;
+    report.reviewed_at = new Date().toISOString();
+    report.reviewed_by = adminId;
+    this.saveState(this.state);
+    return report;
+  }
+}
+
+export const serverDb = ServerDatabase.getInstance();

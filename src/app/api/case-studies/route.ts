@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { serverDb } from '@/lib/server-db';
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const specialtyParam = searchParams.get('specialty');
+    const search = searchParams.get('search') || undefined;
+    const includeDrafts = searchParams.get('includeDrafts') === 'true';
+
+    const currentUser = serverDb.getCurrentUser();
+    const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
+
+    const specialtyIds = specialtyParam
+      ? specialtyParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    // Public users see ONLY published case studies
+    const caseStudies = serverDb.getCaseStudies({
+      specialtyIds,
+      search,
+      includeDraftsAndArchived: includeDrafts && isAdmin,
+      currentUserId: currentUser.id,
+      isAdmin,
+    });
+
+    return NextResponse.json({ caseStudies });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch case studies' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const currentUser = serverDb.getCurrentUser();
+    const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Only administrators have permission to create or publish case studies' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+
+    if (!body.title || !body.short_summary || !body.educational_content) {
+      return NextResponse.json(
+        { error: 'Title, short summary, and educational content are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!body.specialty_ids || body.specialty_ids.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one clinical specialty tag must be assigned' },
+        { status: 400 }
+      );
+    }
+
+    const caseStudy = serverDb.createCaseStudy(
+      {
+        title: body.title.trim(),
+        short_summary: body.short_summary.trim(),
+        educational_content: body.educational_content.trim(),
+        learning_objectives: Array.isArray(body.learning_objectives)
+          ? body.learning_objectives
+          : [body.learning_objectives || 'Demonstrate evidence-based clinical reasoning'],
+        source_references: Array.isArray(body.source_references)
+          ? body.source_references
+          : body.source_references ? [body.source_references] : [],
+        specialty_ids: body.specialty_ids,
+        status: body.status || 'published',
+        author_id: currentUser.id,
+      },
+      currentUser.id,
+      isAdmin
+    );
+
+    return NextResponse.json({ caseStudy }, { status: 201 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to create case study' }, { status: 500 });
+  }
+}
