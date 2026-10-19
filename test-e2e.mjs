@@ -26,6 +26,13 @@ async function runTests() {
   }
 
   try {
+    // Ensure starting as Dr. Sarah Jenkins (Admin)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
     // 1. Session & Profiles
     console.log('\n--- 1. Testing Session & Personas ---');
     const sessionRes = await request('/api/auth/session');
@@ -132,18 +139,56 @@ async function runTests() {
     );
     assert(!hasDraftInPublic, 'ACCEPTANCE TEST STEP 9: Drafts and archived case studies are strictly excluded from public results!');
 
-    // Step 10: Non-admin user cannot create case studies
-    const forbiddenCreateRes = await request('/api/case-studies', {
+    // Step 10: Non-admin user can create a case study (public and private with connections)
+    console.log('\n--- Testing User-Created Public & Private Case Studies ---');
+    const userCreatedCaseRes = await request('/api/case-studies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: 'Unauthorized Case Study Attempt',
-        short_summary: 'Test',
-        educational_content: 'Test',
+        title: 'Marcus Chen Clinical Case: Transcatheter Mitral Repair',
+        short_summary: 'Edge-to-edge transcatheter mitral valve repair in severe degenerative mitral regurgitation.',
+        educational_content: 'Transesophageal echocardiography (TEE) guidance and grasping protocol...',
+        learning_objectives: ['Analyze transmitral gradients', 'Evaluate leaflet coaptation'],
+        source_references: ['JACC Cardiovascular Interventions 2024'],
         specialty_ids: ['cardiology'],
+        status: 'published',
+        is_private: true,
+        shared_with_user_ids: ['00000000-0000-0000-0000-000000000001'], // Shared with Dr. Sarah Jenkins
       }),
     });
-    assert(forbiddenCreateRes.status === 403, 'Security Guard: Non-admin user blocked from creating case studies (403 Forbidden)');
+    assert(userCreatedCaseRes.status === 201, 'Non-admin user can create a private case study shared with connections (201 Created)');
+    const marcusCaseId = userCreatedCaseRes.data.caseStudy.id;
+
+    // Dr. Marcus Chen (author) can open and view it
+    const authorViewRes = await request(`/api/case-studies/${marcusCaseId}`);
+    assert(authorViewRes.ok && authorViewRes.data.caseStudy.educational_content.includes('Transesophageal echocardiography'), 'Author can view their created private case study');
+
+    // Switch to Sarah Jenkins (the shared connection)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+    const sharedViewRes = await request(`/api/case-studies/${marcusCaseId}`);
+    assert(sharedViewRes.ok, 'Shared connection can access the private case study');
+
+    // Also test non-admin user creating a public case study with community/group audience
+    const userPublicCaseRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Community Cardiology Case: Refractory Ventricular Tachycardia Storm',
+        short_summary: 'Catheter ablation vs sympathetic blockade in refractory VT storm.',
+        educational_content: 'Substrate mapping and endocardial-epicardial radiofrequency ablation.',
+        learning_objectives: ['Identify VT storm exit sites', 'Review stellate ganglion block indications'],
+        specialty_ids: ['cardiology'],
+        status: 'published',
+        is_private: false,
+        visibility: 'group',
+        group_id: '10000000-0000-0000-0000-000000000001',
+      }),
+    });
+    assert(userPublicCaseRes.status === 201, 'User can create a public case study for a specific community/group');
 
     // 5. Communities & Groups
     console.log('\n--- 5. Testing Communities & Groups ---');
@@ -177,6 +222,11 @@ async function runTests() {
     // 8. Admin Metrics & Privileges
     console.log('\n--- 8. Testing Admin Metrics & Role Security ---');
     // As normal user, metrics should be forbidden
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000002' }),
+    });
     const normalUserMetrics = await request('/api/admin/metrics');
     assert(normalUserMetrics.status === 403, 'Non-admin blocked from admin metrics (403 Forbidden)');
 

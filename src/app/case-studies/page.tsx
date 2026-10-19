@@ -103,17 +103,15 @@ export default function CaseStudiesPage() {
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex-shrink-0">
-            <Link
-              href="/admin/case-studies/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Publish New Case Study (Admin)</span>
-            </Link>
-          </div>
-        )}
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <Link
+            href="/case-studies/new"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Create Case Study</span>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters Bar */}

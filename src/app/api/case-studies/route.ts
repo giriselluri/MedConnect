@@ -33,14 +33,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const currentUser = serverDb.getCurrentUser();
-    const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
-
-    if (!isAdmin) {
+    if (!currentUser) {
       return NextResponse.json(
-        { error: 'Forbidden: Only administrators have permission to create or publish case studies' },
-        { status: 403 }
+        { error: 'Unauthorized: Please sign in to create a case study' },
+        { status: 401 }
       );
     }
+    const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     const body = await req.json();
 
@@ -72,6 +71,10 @@ export async function POST(req: NextRequest) {
         specialty_ids: body.specialty_ids,
         status: body.status || 'published',
         author_id: currentUser.id,
+        is_private: Boolean(body.is_private),
+        shared_with_user_ids: Array.isArray(body.shared_with_user_ids) ? body.shared_with_user_ids : [],
+        visibility: body.visibility || 'everyone',
+        group_id: body.group_id,
         password_protected: Boolean(body.password_protected),
         access_password: body.access_password,
       },

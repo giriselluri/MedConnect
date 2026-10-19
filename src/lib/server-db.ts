@@ -1164,6 +1164,24 @@ export class ServerDatabase {
     return true;
   }
 
+  public areUsersConnected(userA?: string, userB?: string): boolean {
+    if (!userA || !userB) return false;
+    if (userA === userB) return true;
+    return this.state.connections.some(
+      (c) =>
+        c.status === 'accepted' &&
+        ((c.requester_id === userA && c.recipient_id === userB) ||
+         (c.requester_id === userB && c.recipient_id === userA))
+    );
+  }
+
+  public isUserInGroup(userId?: string, groupId?: string): boolean {
+    if (!userId || !groupId) return false;
+    return this.state.group_members.some(
+      (gm) => gm.group_id === groupId && gm.user_id === userId
+    );
+  }
+
   // --- Case Studies (Critical End-to-End Feature) ---
   public getCaseStudies(options: {
     specialtyIds?: string[];
@@ -1175,9 +1193,39 @@ export class ServerDatabase {
     const effectiveUserId = options.currentUserId || this.state.current_user_id;
     let list = this.state.case_studies;
 
-    // Rule: Non-admin users see ONLY published case studies
+    // Rule: Non-admin users see published case studies, or their own drafts
     if (!options.isAdmin && !options.includeDraftsAndArchived) {
-      list = list.filter((c) => c.status === 'published');
+      list = list.filter((c) => c.status === 'published' || c.author_id === effectiveUserId);
+    }
+
+    // Privacy & Audience Filtering
+    if (!options.isAdmin) {
+      list = list.filter((c) => {
+        // Author can always see their own
+        if (c.author_id === effectiveUserId) return true;
+
+        // If private: author, shared connections, or password-protected
+        if (c.is_private) {
+          if (c.shared_with_user_ids?.includes(effectiveUserId)) return true;
+          if (c.password_protected) return true;
+          return false;
+        }
+
+        // If public: check audience visibility
+        if (!c.visibility || c.visibility === 'everyone') {
+          return true;
+        }
+        if (c.visibility === 'connections') {
+          return this.areUsersConnected(effectiveUserId, c.author_id);
+        }
+        if (c.visibility === 'followers') {
+          return this.areUsersConnected(effectiveUserId, c.author_id);
+        }
+        if (c.visibility === 'group' && c.group_id) {
+          return this.isUserInGroup(effectiveUserId, c.group_id);
+        }
+        return true;
+      });
     }
 
     // Filter by Specialty IDs (Canonical matching)
@@ -1206,8 +1254,10 @@ export class ServerDatabase {
     return list
       .map((cs) => {
         const { access_password, ...sanitized } = cs;
+        const group = cs.group_id ? this.state.groups.find((g) => g.id === cs.group_id) : undefined;
         return {
           ...sanitized,
+          group,
           password_protected: Boolean(cs.password_protected),
           is_bookmarked: this.state.bookmarks.some(
             (b) => b.user_id === effectiveUserId && b.item_type === 'case_study' && b.item_id === cs.id
@@ -1217,20 +1267,39 @@ export class ServerDatabase {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getCaseStudyById(id: string, isAdmin: boolean = false, password?: string, bypass: boolean = false): (CaseStudy & { is_locked?: boolean }) | null {
+  public getCaseStudyById(
+    id: string,
+    isAdmin: boolean = false,
+    password?: string,
+    bypass: boolean = false,
+    currentUserId?: string
+  ): (CaseStudy & { is_locked?: boolean }) | null {
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) return null;
-    if (cs.status !== 'published' && !isAdmin) {
+    const effectiveUserId = currentUserId || this.state.current_user_id;
+
+    if (cs.status !== 'published' && !isAdmin && cs.author_id !== effectiveUserId) {
       return null;
     }
+
+    const isAuthor = cs.author_id === effectiveUserId;
+    const isShared = Boolean(cs.shared_with_user_ids?.includes(effectiveUserId));
+
+    // If private without password, must be author, shared connection, or admin
+    if (cs.is_private && !cs.password_protected && !isAuthor && !isShared && !isAdmin) {
+      return null;
+    }
+
     const isProtected = Boolean(cs.password_protected);
     const isUnlocked = !isProtected || (bypass && isAdmin) || (Boolean(password) && password === cs.access_password);
 
     const { access_password, ...sanitized } = cs;
+    const group = cs.group_id ? this.state.groups.find((g) => g.id === cs.group_id) : undefined;
 
     if (!isUnlocked) {
       return {
         ...sanitized,
+        group,
         is_locked: true,
         educational_content: '',
         learning_objectives: [],
@@ -1240,6 +1309,7 @@ export class ServerDatabase {
 
     return {
       ...sanitized,
+      group,
       is_locked: false,
     };
   }
@@ -1272,16 +1342,20 @@ export class ServerDatabase {
       status: CaseStudyStatus;
       password_protected?: boolean;
       access_password?: string;
+      is_private?: boolean;
+      shared_with_user_ids?: string[];
+      visibility?: 'everyone' | 'connections' | 'followers' | 'group';
+      group_id?: string;
     },
     userId: string,
-    isAdmin: boolean
+    isAdmin: boolean = false
   ): CaseStudy {
-    if (!isAdmin) {
-      throw new Error('Forbidden: Only administrators can create or publish case studies');
-    }
-
     const author = this.getProfileById(payload.author_id || userId) || this.getCurrentUser();
     const specialties = this.state.specialties.filter((s) => payload.specialty_ids.includes(s.id));
+    const group = payload.group_id ? this.state.groups.find((g) => g.id === payload.group_id) : undefined;
+
+    const isPrivate = Boolean(payload.is_private);
+    const passwordProtected = Boolean(payload.password_protected) || Boolean(payload.access_password && payload.access_password.trim());
 
     const newCaseStudy: CaseStudy = {
       id: `case_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -1293,12 +1367,17 @@ export class ServerDatabase {
       author_id: author.id,
       author_name: author.full_name,
       author_title: author.title,
-      status: payload.status,
-      published_at: payload.status === 'published' ? new Date().toISOString() : null,
+      status: payload.status || 'published',
+      published_at: payload.status !== 'draft' ? new Date().toISOString() : null,
       views_count: 0,
       bookmarks_count: 0,
-      password_protected: Boolean(payload.password_protected),
-      access_password: payload.access_password?.trim() || undefined,
+      password_protected: passwordProtected,
+      access_password: payload.access_password?.trim() || (passwordProtected ? 'clinical2024' : undefined),
+      is_private: isPrivate,
+      shared_with_user_ids: isPrivate && Array.isArray(payload.shared_with_user_ids) ? payload.shared_with_user_ids : [],
+      visibility: isPrivate ? undefined : (payload.visibility || 'everyone'),
+      group_id: isPrivate ? undefined : payload.group_id,
+      group,
       specialties: specialties.length > 0 ? specialties : [this.state.specialties[0]],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1316,8 +1395,10 @@ export class ServerDatabase {
     userId: string,
     isAdmin: boolean
   ): CaseStudy {
-    if (!isAdmin) {
-      throw new Error('Forbidden: Only administrators can update case studies');
+    const cs = this.state.case_studies.find((c) => c.id === id);
+    if (!cs) throw new Error('Case study not found');
+    if (!isAdmin && cs.author_id !== userId) {
+      throw new Error('Forbidden: You can only edit your own case studies');
     }
 
     const idx = this.state.case_studies.findIndex((c) => c.id === id);

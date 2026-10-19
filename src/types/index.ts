@@ -92,6 +92,11 @@ export interface CaseStudy {
   password_protected?: boolean;
   access_password?: string; // only stored server-side, never returned in API
   is_locked?: boolean;
+  is_private?: boolean;
+  shared_with_user_ids?: string[];
+  visibility?: 'everyone' | 'connections' | 'followers' | 'group';
+  group_id?: string;
+  group?: Group;
   created_at: string;
   updated_at: string;
   is_bookmarked?: boolean;

@@ -215,10 +215,26 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
               <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
               Educational Clinical Case
             </span>
-            {caseStudy.password_protected && (
+            {caseStudy.is_private && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300">
                 <Lock className="w-3 h-3 text-amber-600" />
-                Private Case
+                Private Case (Shared with Connections)
+              </span>
+            )}
+            {caseStudy.password_protected && !caseStudy.is_private && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300">
+                <Lock className="w-3 h-3 text-amber-600" />
+                Protected Case
+              </span>
+            )}
+            {caseStudy.visibility === 'group' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-50 text-purple-800 border border-purple-200">
+                Community Case
+              </span>
+            )}
+            {caseStudy.visibility === 'connections' && !caseStudy.is_private && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200">
+                Connections Only
               </span>
             )}
             {caseStudy.status !== 'published' && (

@@ -73,10 +73,25 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
           </div>
 
           <div className="flex items-center gap-1.5">
-            {caseStudy.password_protected && (
+            {caseStudy.is_private ? (
               <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <Lock className="w-3 h-3 text-amber-600" />
                 Private Case
+              </span>
+            ) : caseStudy.password_protected ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Lock className="w-3 h-3 text-amber-600" />
+                Protected Case
+              </span>
+            ) : null}
+            {caseStudy.visibility === 'group' && (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                Community
+              </span>
+            )}
+            {caseStudy.visibility === 'connections' && !caseStudy.is_private && (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                Connections
               </span>
             )}
             <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
