@@ -14,14 +14,26 @@ import {
   UserPlus,
   ArrowRight,
   Loader2,
+  Plus,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function CommunitiesPage() {
-  const { currentUser } = useApp();
+  const { currentUser, specialties } = useApp();
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Create community modal state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [specialtyId, setSpecialtyId] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const fetchGroups = async () => {
     setIsLoading(true);
@@ -35,6 +47,50 @@ export default function CommunitiesPage() {
       console.error(e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCreateCommunity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setCreateError('Community name is required');
+      return;
+    }
+    if (!description.trim()) {
+      setCreateError('Community description is required');
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+          specialty_id: specialtyId || undefined,
+          is_private: isPrivate,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to create community');
+      }
+
+      const data = await res.json();
+      setGroups((prev) => [data.group, ...prev]);
+      setIsCreateModalOpen(false);
+      setName('');
+      setDescription('');
+      setSpecialtyId('');
+      setIsPrivate(false);
+    } catch (err: any) {
+      setCreateError(err.message || 'Failed to create community');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -102,15 +158,25 @@ export default function CommunitiesPage() {
           </p>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search communities by name or topic..."
-            className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-teal-500"
-          />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search communities..."
+              className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-teal-500"
+            />
+          </div>
+
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Community</span>
+          </button>
         </div>
       </div>
 
@@ -210,6 +276,107 @@ export default function CommunitiesPage() {
       )}
         </div>
       </div>
+
+      {/* Create Community Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-teal-100 text-teal-800">
+                  <Compass className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-bold text-slate-900">Create Specialty Community</h3>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCommunity} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Community Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Critical Care Resuscitation Society"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description *</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Specialty clinical objectives, discussion norms, case sharing guidelines..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Specialty Alignment</label>
+                <select
+                  value={specialtyId}
+                  onChange={(e) => setSpecialtyId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">Cross-Specialty / Interdisciplinary</option>
+                  {specialties.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isPrivate}
+                    onChange={(e) => setIsPrivate(e.target.checked)}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>Private Community (Requires invitation to join)</span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-xs transition disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  {isCreating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Create Community</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

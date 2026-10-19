@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useApp } from '@/lib/context';
-import { Post } from '@/types';
+import { Post, JobListing, Advertisement } from '@/types';
 import { LeftSidebar } from '@/components/left-sidebar';
 import { RightSidebar } from '@/components/right-sidebar';
 import { PostComposer } from '@/components/post-composer';
 import { PostCard } from '@/components/post-card';
+import { JobCard } from '@/components/job-card';
+import { AdCard } from '@/components/ad-card';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import {
   Sparkles,
@@ -22,19 +24,36 @@ import Link from 'next/link';
 export default function HomePage() {
   const { specialties, activeSpecialty, setActiveSpecialty } = useApp();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [jobs, setJobs] = useState<JobListing[]>([]);
+  const [ads, setAds] = useState<Advertisement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPosts = async () => {
+  const fetchFeed = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/posts');
-      if (res.ok) {
-        const data = await res.json();
+      const [postsRes, jobsRes, adsRes] = await Promise.all([
+        fetch('/api/posts'),
+        fetch('/api/jobs?is_active=true'),
+        fetch('/api/ads?is_active=true'),
+      ]);
+
+      if (postsRes.ok) {
+        const data = await postsRes.json();
         setPosts(data.posts || []);
       } else {
         throw new Error('Failed to load posts');
+      }
+
+      if (jobsRes.ok) {
+        const jobsData = await jobsRes.json();
+        setJobs(jobsData.jobs || []);
+      }
+
+      if (adsRes.ok) {
+        const adsData = await adsRes.json();
+        setAds(adsData.ads || []);
       }
     } catch (e: any) {
       setError(e.message || 'Error fetching feed');
@@ -44,7 +63,7 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchPosts();
+    fetchFeed();
   }, []);
 
   const handlePostCreated = (newPost: Post) => {
@@ -60,6 +79,14 @@ export default function HomePage() {
   const filteredPosts = activeSpecialty
     ? posts.filter((p) => p.specialty_id === activeSpecialty || p.specialty?.id === activeSpecialty)
     : posts;
+
+  const filteredJobs = activeSpecialty
+    ? jobs.filter((j) => j.specialty_id === activeSpecialty)
+    : jobs;
+
+  const filteredAds = activeSpecialty
+    ? ads.filter((a) => a.specialty_id === activeSpecialty)
+    : ads;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -153,7 +180,7 @@ export default function HomePage() {
             <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600">
               <p className="text-xs font-semibold">{error}</p>
               <button
-                onClick={fetchPosts}
+                onClick={fetchFeed}
                 className="mt-3 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 inline-flex items-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -161,31 +188,56 @@ export default function HomePage() {
               </button>
             </div>
           ) : filteredPosts.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
-              <Stethoscope className="w-8 h-8 text-slate-400 mx-auto mb-1" />
-              <h4 className="font-bold text-slate-800 text-sm">No posts found</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                {activeSpecialty
-                  ? 'No posts matching the selected specialty tag. Try selecting "All Feed" or be the first to publish a clinical insight.'
-                  : 'Be the first to share a case reflection, clinical trial update, or practice inquiry.'}
-              </p>
-              {activeSpecialty && (
-                <button
-                  onClick={() => setActiveSpecialty(null)}
-                  className="mt-2 text-xs font-semibold text-teal-700 underline"
-                >
-                  Clear specialty filter
-                </button>
-              )}
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
+                <Stethoscope className="w-8 h-8 text-slate-400 mx-auto mb-1" />
+                <h4 className="font-bold text-slate-800 text-sm">No posts found</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {activeSpecialty
+                    ? 'No posts matching the selected specialty tag. Try selecting "All Feed" or be the first to publish a clinical insight.'
+                    : 'Be the first to share a case reflection, clinical trial update, or practice inquiry.'}
+                </p>
+                {activeSpecialty && (
+                  <button
+                    onClick={() => setActiveSpecialty(null)}
+                    className="mt-2 text-xs font-semibold text-teal-700 underline"
+                  >
+                    Clear specialty filter
+                  </button>
+                )}
+              </div>
+              {filteredJobs.length > 0 && <JobCard job={filteredJobs[0]} />}
+              {filteredAds.length > 0 && <AdCard ad={filteredAds[0]} />}
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredPosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  onPostDeleted={handlePostDeleted}
-                />
+              {filteredPosts.map((post, idx) => (
+                <React.Fragment key={post.id}>
+                  <PostCard
+                    post={post}
+                    onPostDeleted={handlePostDeleted}
+                  />
+
+                  {/* Interleave Job Opportunity after 1st post */}
+                  {idx === 0 && filteredJobs.length > 0 && (
+                    <JobCard job={filteredJobs[0]} />
+                  )}
+
+                  {/* Interleave Sponsored Ad after 2nd post */}
+                  {idx === 1 && filteredAds.length > 0 && (
+                    <AdCard ad={filteredAds[0]} />
+                  )}
+
+                  {/* Interleave 2nd Job Opportunity after 3rd post */}
+                  {idx === 2 && filteredJobs.length > 1 && (
+                    <JobCard job={filteredJobs[1]} />
+                  )}
+
+                  {/* Interleave 2nd Sponsored Ad after 4th post */}
+                  {idx === 3 && filteredAds.length > 1 && (
+                    <AdCard ad={filteredAds[1]} />
+                  )}
+                </React.Fragment>
               ))}
             </div>
           )}

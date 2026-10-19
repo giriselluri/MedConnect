@@ -99,7 +99,37 @@ export default function NetworkPage() {
     }
   };
 
-  // Directory filter (exclude self)
+  const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
+
+  const handleRemoveConnection = async (connectionId: string) => {
+    if (!confirm('Are you sure you want to remove this established connection?')) return;
+    setActionLoading((prev) => ({ ...prev, [connectionId]: true }));
+    try {
+      const res = await fetch(`/api/connections/${connectionId}`, { method: 'DELETE' });
+      if (res.ok) {
+        await loadNetworkData();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [connectionId]: false }));
+    }
+  };
+
+  const handleToggleFollow = async (profileId: string) => {
+    setActionLoading((prev) => ({ ...prev, [`follow_${profileId}`]: true }));
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/follow`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setFollowingMap((prev) => ({ ...prev, [profileId]: data.is_following }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [`follow_${profileId}`]: false }));
+    }
+  };
   const filteredProfiles = profiles.filter((p) => {
     if (p.id === currentUser?.id) return false;
     const matchesSearch =
@@ -273,9 +303,18 @@ export default function NetworkPage() {
                       </div>
                     </Link>
 
-                    <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
-                      Connected
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="px-2.5 py-1 bg-teal-100 text-teal-800 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                        Connected
+                      </span>
+                      <button
+                        onClick={() => handleRemoveConnection(conn.id)}
+                        disabled={actionLoading[conn.id]}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -409,26 +448,40 @@ export default function NetworkPage() {
                         View Profile
                       </Link>
 
-                      {isConnected ? (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs font-bold">
-                          <Check className="w-3 h-3 text-teal-600" />
-                          Connected
-                        </span>
-                      ) : isPendingSent ? (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-full text-xs font-medium">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          Request Sent
-                        </span>
-                      ) : (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleSendRequest(profile.id)}
-                          disabled={isConnecting}
-                          className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-2xs transition"
+                          onClick={() => handleToggleFollow(profile.id)}
+                          disabled={actionLoading[`follow_${profile.id}`]}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition border ${
+                            followingMap[profile.id]
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                          }`}
                         >
-                          <UserPlus className="w-3.5 h-3.5" />
-                          <span>Connect</span>
+                          {followingMap[profile.id] ? 'Following' : 'Follow'}
                         </button>
-                      )}
+
+                        {isConnected ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs font-bold">
+                            <Check className="w-3 h-3 text-teal-600" />
+                            Connected
+                          </span>
+                        ) : isPendingSent ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-full text-xs font-medium">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            Sent
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleSendRequest(profile.id)}
+                            disabled={isConnecting}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-2xs transition"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Connect</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

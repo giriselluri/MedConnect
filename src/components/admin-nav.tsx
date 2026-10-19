@@ -10,6 +10,8 @@ import {
   ShieldAlert,
   ArrowLeft,
   PlusCircle,
+  Briefcase,
+  Megaphone,
 } from 'lucide-react';
 
 export function AdminNav() {
@@ -18,6 +20,8 @@ export function AdminNav() {
   const links = [
     { href: '/admin', label: 'Overview & Metrics', icon: LayoutDashboard },
     { href: '/admin/case-studies', label: 'Case Studies Management', icon: BookOpen },
+    { href: '/admin/jobs', label: 'Jobs Management', icon: Briefcase },
+    { href: '/admin/ads', label: 'Advertisements Management', icon: Megaphone },
     { href: '/admin/users', label: 'User Roles & Access', icon: Users },
     { href: '/admin/moderation', label: 'Content Moderation', icon: ShieldAlert },
   ];

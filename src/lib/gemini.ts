@@ -9,6 +9,7 @@ export interface StructuredResearchSummary {
   discussion_questions: string[];
   relevant_keywords: string[];
   disclaimer: string;
+  model_used: 'gemini-1.5-flash' | 'clinical-heuristic-fallback';
 }
 
 export async function generateResearchSummary(
@@ -54,7 +55,9 @@ Respond ONLY with a valid JSON object matching this exact schema:
       });
 
       const responseText = result.response.text();
-      return JSON.parse(responseText);
+      const parsed = JSON.parse(responseText);
+      parsed.model_used = 'gemini-1.5-flash';
+      return parsed;
     } catch (error) {
       console.warn('Gemini API call failed or timed out, using high-fidelity clinical parser fallback:', error);
     }
@@ -114,5 +117,6 @@ function generateClinicalFallback(text: string, title?: string): StructuredResea
     ],
     relevant_keywords: uniqueKeywords.length > 0 ? uniqueKeywords : ['clinical-research', 'therapeutics', 'outcomes', 'biomarkers', 'evidence-based'],
     disclaimer: 'This analysis is an AI-assisted synthesis based solely on the provided text. It is intended for peer academic discussion and does not constitute clinical diagnostic or treatment advice.',
+    model_used: 'clinical-heuristic-fallback',
   };
 }

@@ -171,6 +171,21 @@ export default function NewsPage() {
         </Link>
       </div>
 
+      {/* Illustrative Demo Disclosure Banner */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 flex items-start gap-3">
+        <span className="p-1 rounded-lg bg-amber-200 text-amber-800 font-bold text-[10px] uppercase tracking-wider flex-shrink-0 mt-0.5">
+          Illustrative Sample Data
+        </span>
+        <div className="space-y-0.5">
+          <p className="font-semibold text-amber-950">
+            Curated MVP Clinical Demonstration Content
+          </p>
+          <p className="text-[11px] text-amber-800 leading-relaxed">
+            The articles displayed below are simulated clinical wire items curated for platform validation and testing of bookmarking and AI summarization workflows. Live automated RSS and PubMed feeds are documented enhancements for the production launch.
+          </p>
+        </div>
+      </div>
+
       {/* Filters Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">

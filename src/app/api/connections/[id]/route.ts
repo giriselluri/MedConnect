@@ -16,3 +16,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: error.message || 'Failed to update connection' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const currentUser = serverDb.getCurrentUser();
+    const success = serverDb.removeConnection(params.id, currentUser.id);
+
+    if (!success) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Connection removed successfully' });
+  } catch (error: any) {
+    const status = error.message.includes('Unauthorized') ? 403 : 500;
+    return NextResponse.json({ error: error.message || 'Failed to remove connection' }, { status });
+  }
+}

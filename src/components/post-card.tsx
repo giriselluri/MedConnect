@@ -19,6 +19,11 @@ import {
   UserCheck,
   Compass,
   Globe,
+  Repeat,
+  Edit2,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -30,6 +35,7 @@ interface PostCardProps {
 export function PostCard({ post, onPostDeleted }: PostCardProps) {
   const { currentUser, toggleBookmark } = useApp();
   const [likesCount, setLikesCount] = useState(post.likes_count || 0);
+  const [repostsCount, setRepostsCount] = useState(post.reposts_count || 0);
   const [isLiked, setIsLiked] = useState(Boolean(post.is_liked));
   const [isBookmarked, setIsBookmarked] = useState(Boolean(post.is_bookmarked));
   const [comments, setComments] = useState<Comment[]>(post.comments || []);
@@ -38,6 +44,15 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+
+  // Repost modal
+  const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
+  const [quoteComment, setQuoteComment] = useState('');
+  const [isReposting, setIsReposting] = useState(false);
+
+  // Comment edit state
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editedCommentText, setEditedCommentText] = useState('');
 
   const isAuthor = currentUser?.id === post.author_id;
   const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
@@ -108,6 +123,64 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
     }
   };
 
+  const handleRepost = async () => {
+    setIsReposting(true);
+    try {
+      const res = await fetch(`/api/posts/${post.id}/repost`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quote_comment: quoteComment.trim() || undefined }),
+      });
+      if (res.ok) {
+        setRepostsCount((c) => c + 1);
+        setIsRepostModalOpen(false);
+        setQuoteComment('');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsReposting(false);
+    }
+  };
+
+  const handleStartEditComment = (comment: Comment) => {
+    setEditingCommentId(comment.id);
+    setEditedCommentText(comment.content);
+  };
+
+  const handleSaveEditComment = async (commentId: string) => {
+    if (!editedCommentText.trim()) return;
+    try {
+      const res = await fetch(`/api/posts/${post.id}/comments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment_id: commentId, content: editedCommentText.trim() }),
+      });
+      if (res.ok) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === commentId ? { ...c, content: editedCommentText.trim() } : c))
+        );
+        setEditingCommentId(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+    try {
+      const res = await fetch(`/api/posts/${post.id}/comments?comment_id=${commentId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleShare = () => {
     if (typeof window !== 'undefined') {
       navigator.clipboard.writeText(`${window.location.origin}/#${post.id}`);
@@ -125,7 +198,15 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
   };
 
   return (
-    <article className="bg-white rounded-xl shadow-xs border border-slate-200 p-4 sm:p-5 transition hover:border-slate-300">
+    <article className="bg-white rounded-xl shadow-xs border border-slate-200 p-4 sm:p-5 transition hover:border-slate-300 relative">
+      {/* Repost attribution bar if this post is a repost */}
+      {post.repost_of && (
+        <div className="flex items-center gap-1.5 text-xs text-teal-800 bg-teal-50/80 px-2.5 py-1 rounded-lg mb-3 font-semibold border border-teal-200/60">
+          <Repeat className="w-3.5 h-3.5 text-teal-600" />
+          <span>{post.author.full_name} reposted:</span>
+        </div>
+      )}
+
       {/* Author Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <Link href={`/profile/${post.author.id}`} className="flex items-center gap-3 group min-w-0">
@@ -205,10 +286,45 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
         </div>
       </div>
 
-      {/* Post Text Content */}
-      <div className="text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line mb-3 font-normal">
-        {post.content}
-      </div>
+      {/* Post Text Content (Quote comment or original post text) */}
+      {post.content && (
+        <div className="text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line mb-3 font-normal">
+          {post.content}
+        </div>
+      )}
+
+      {/* Embedded Original Post Card for Reposts */}
+      {post.repost_of && (
+        <div className="mb-3.5 p-3.5 rounded-xl border border-slate-200 bg-slate-50/90 space-y-2">
+          <div className="flex items-center gap-2">
+            <img
+              src={post.repost_of.author.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(post.repost_of.author.full_name)}&background=0d9488&color=fff`}
+              alt={post.repost_of.author.full_name}
+              className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <Link href={`/profile/${post.repost_of.author.id}`} className="font-bold text-xs text-slate-900 hover:text-teal-700 truncate block">
+                {post.repost_of.author.full_name}
+              </Link>
+              <p className="text-[10px] text-slate-500 truncate">{post.repost_of.author.title}</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+            {post.repost_of.content}
+          </p>
+          {post.repost_of.article_url && (
+            <a
+              href={post.repost_of.article_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-teal-700 hover:underline flex items-center gap-1 font-medium pt-1"
+            >
+              <ExternalLink className="w-3 h-3" />
+              <span>{post.repost_of.article_title || post.repost_of.article_url}</span>
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Topic Tags */}
       {post.topic_tags && post.topic_tags.length > 0 && (
@@ -225,7 +341,7 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
       )}
 
       {/* Attached Scientific Article Link Preview */}
-      {post.article_url && (
+      {post.article_url && !post.repost_of && (
         <a
           href={post.article_url}
           target="_blank"
@@ -259,7 +375,7 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
         </div>
         <div className="flex items-center gap-3">
           <span>{comments.length} Comments</span>
-          <span>{post.reposts_count || 0} Shares</span>
+          <span>{repostsCount} {repostsCount === 1 ? 'Repost' : 'Reposts'}</span>
         </div>
       </div>
 
@@ -283,6 +399,15 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
         >
           <MessageSquare className="w-4 h-4" />
           <span>Comment</span>
+        </button>
+
+        <button
+          onClick={() => setIsRepostModalOpen(true)}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg hover:bg-slate-100 font-medium transition text-slate-600 hover:text-teal-700"
+          title="Repost to your network"
+        >
+          <Repeat className="w-4 h-4" />
+          <span>Repost</span>
         </button>
 
         <button
@@ -360,13 +485,117 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-500 truncate">{comment.author.title}</p>
-                    <p className="text-xs text-slate-800 mt-1 whitespace-pre-line leading-relaxed">
-                      {comment.content}
-                    </p>
+
+                    {/* Inline Comment Editing Form */}
+                    {editingCommentId === comment.id ? (
+                      <div className="mt-1.5 space-y-1.5">
+                        <textarea
+                          rows={2}
+                          value={editedCommentText}
+                          onChange={(e) => setEditedCommentText(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSaveEditComment(comment.id)}
+                            className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded text-[11px] font-semibold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingCommentId(null)}
+                            className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[11px] font-semibold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-800 mt-1 whitespace-pre-line leading-relaxed">
+                        {comment.content}
+                      </p>
+                    )}
+
+                    {/* Comment author/admin actions */}
+                    {(currentUser?.id === comment.author_id || isAdmin) && editingCommentId !== comment.id && (
+                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
+                        <button
+                          onClick={() => handleStartEditComment(comment)}
+                          className="hover:text-teal-700 hover:underline inline-flex items-center gap-0.5"
+                        >
+                          <Edit2 className="w-2.5 h-2.5" />
+                          <span>Edit</span>
+                        </button>
+                        <span>•</span>
+                        <button
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="hover:text-red-600 hover:underline inline-flex items-center gap-0.5"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Repost Modal */}
+      {isRepostModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
+                <Repeat className="w-4 h-4 text-teal-600" />
+                <span>Repost to Your Feed</span>
+              </div>
+              <button
+                onClick={() => setIsRepostModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-3">
+              Add your clinical perspective, or repost instantly with original attribution to {post.author.full_name}.
+            </p>
+
+            <textarea
+              rows={3}
+              placeholder="Add your clinical commentary (optional)..."
+              value={quoteComment}
+              onChange={(e) => setQuoteComment(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-teal-500 rounded-xl p-3 text-xs text-slate-800 focus:outline-hidden mb-3"
+            />
+
+            {/* Snippet of original post */}
+            <div className="p-2.5 bg-slate-100/70 rounded-lg border border-slate-200 text-xs text-slate-600 line-clamp-2 mb-4">
+              <strong>{post.author.full_name}:</strong> {post.content}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRepostModalOpen(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRepost}
+                disabled={isReposting}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-xs transition disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {isReposting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{quoteComment.trim() ? 'Quote & Repost' : 'Instant Repost'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

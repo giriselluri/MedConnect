@@ -57,6 +57,9 @@ export interface Post {
   likes_count: number;
   comments_count: number;
   reposts_count: number;
+  repost_of_id?: string;
+  repost_of?: Post;
+  quote_comment?: string;
   is_liked?: boolean;
   is_bookmarked?: boolean;
   created_at: string;
@@ -153,6 +156,8 @@ export interface AISession {
     limitations: string[];
     discussion_questions: string[];
     relevant_keywords: string[];
+    disclaimer?: string;
+    model_used?: 'gemini-1.5-flash' | 'clinical-heuristic-fallback';
   };
   created_at: string;
 }
@@ -196,4 +201,59 @@ export interface ContentReport {
   created_at: string;
   reviewed_at?: string;
   reviewed_by?: string;
+}
+
+export interface JobListing {
+  id: string;
+  title: string;
+  organization: string;
+  location: string;
+  employment_type: 'Full-time' | 'Part-time' | 'Fellowship' | 'Locum Tenens';
+  specialty_id?: string;
+  specialty_name?: string;
+  salary_range?: string;
+  description: string;
+  requirements: string[];
+  apply_url?: string;
+  is_active: boolean;
+  is_demo?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Advertisement {
+  id: string;
+  title: string;
+  sponsor: string;
+  headline: string;
+  body_text: string;
+  image_url?: string;
+  target_url: string;
+  cta_text: string;
+  specialty_id?: string;
+  specialty_name?: string;
+  is_active: boolean;
+  is_demo?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string; // recipient
+  actor_id: string; // actor
+  actor?: Profile;
+  type: 'connection_request' | 'connection_accepted' | 'post_like' | 'post_comment' | 'repost' | 'follow';
+  item_id?: string;
+  item_title?: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface Follow {
+  id: string;
+  follower_id: string;
+  following_id: string;
+  created_at: string;
 }

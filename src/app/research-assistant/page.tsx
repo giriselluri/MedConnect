@@ -127,13 +127,24 @@ function ResearchAssistantContent() {
       `${summary.plain_language_summary}\n\n` +
       `Key Trial Takeaways:\n` +
       summary.key_findings.map((f) => `• ${f}`).join('\n') + '\n\n' +
-      `Question for colleagues: ${summary.discussion_questions[0] || 'How do you interpret these findings in practice?'}\n\n` +
-      summary.relevant_keywords.map((k) => `#${k.replace(/[^a-zA-Z0-9]/g, '')}`).join(' ');
+      (summary.methodology ? `Methodology: ${summary.methodology}\n\n` : '') +
+      (summary.limitations && summary.limitations.length > 0 ? `Limitations:\n${summary.limitations.map((l) => `• ${l}`).join('\n')}\n\n` : '') +
+      (summary.discussion_questions && summary.discussion_questions.length > 0 ? `Discussion Question for Colleagues:\n${summary.discussion_questions[0]}\n\n` : '') +
+      (sourceUrl ? `Source: ${sourceUrl}\n\n` : '') +
+      (summary.relevant_keywords || []).map((k) => `#${k.replace(/[^a-zA-Z0-9]/g, '')}`).join(' ');
 
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('medconnect_post_draft', postDraft);
+      sessionStorage.setItem(
+        'medconnect_pending_post',
+        JSON.stringify({
+          content: postDraft,
+          article_title: title || 'Clinical Research Synthesis',
+          article_url: sourceUrl || undefined,
+          tags: summary.relevant_keywords || [],
+        })
+      );
     }
-    router.push('/');
+    router.push('/?compose=1');
   };
 
   const loadSample = () => {
@@ -337,6 +348,25 @@ function ResearchAssistantContent() {
                     <span>Create Post</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Model Source Badge */}
+              <div className="flex items-center justify-between text-[11px] p-2.5 rounded-xl border bg-slate-50">
+                <span className="font-semibold text-slate-600">Synthesis Engine:</span>
+                {summary.model_used === 'gemini-1.5-flash' ? (
+                  <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    Gemini 1.5 Flash (Live AI)
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1.5 font-bold text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300"
+                    title="Processed via validated high-fidelity clinical heuristic parser"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    Clinical Heuristic Fallback
+                  </span>
+                )}
               </div>
 
               {/* 1. Plain Language Summary */}

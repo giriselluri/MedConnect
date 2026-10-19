@@ -24,8 +24,15 @@ import {
   UserPlus,
   Stethoscope,
   ShieldCheck,
+  Bell,
+  Heart,
+  MessageSquare,
+  Repeat,
+  Check,
+  UserCheck,
 } from 'lucide-react';
 import { UserSwitchModal } from './user-switch-modal';
+import { Notification } from '@/types';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -33,7 +40,61 @@ export function Navbar() {
   const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unread_count || 0);
+      }
+    } catch {
+      // ignore in background
+    }
+  };
+
+  React.useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000); // 20s background poll
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mark_all: true }),
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleMarkSingleRead = async (id: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
+      // ignore
+    }
+  };
 
   const navLinks = [
     { href: '/', label: 'Home', icon: Home },
@@ -87,8 +148,90 @@ export function Navbar() {
 
             {/* Brand & Search occupy left side cleanly */}
 
-            {/* Right: Persona Switcher & User Profile Menu */}
-            <div className="flex items-center gap-2.5">
+            {/* Right: Persona Switcher, Notifications & User Profile Menu */}
+            <div className="flex items-center gap-2">
+              {/* Notification Bell Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsNotifOpen(!isNotifOpen)}
+                  className="relative p-2 rounded-full hover:bg-slate-100 text-slate-600 transition focus:outline-hidden"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {isNotifOpen && (
+                  <div
+                    className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-fade-in"
+                    onMouseLeave={() => setIsNotifOpen(false)}
+                  >
+                    <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800">
+                            {unreadCount} new
+                          </span>
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={handleMarkAllRead}
+                          className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 hover:underline"
+                        >
+                          Mark all as read
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                      {notifications.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.slice(0, 10).map((n) => (
+                          <div
+                            key={n.id}
+                            onClick={() => !n.is_read && handleMarkSingleRead(n.id)}
+                            className={`p-3 text-xs transition cursor-pointer flex items-start gap-2.5 hover:bg-slate-50 ${
+                              !n.is_read ? 'bg-teal-50/40' : ''
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
+                              {n.type === 'post_like' && <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />}
+                              {n.type === 'post_comment' && <MessageSquare className="w-3.5 h-3.5 text-blue-500" />}
+                              {n.type === 'repost' && <Repeat className="w-3.5 h-3.5 text-emerald-500" />}
+                              {n.type === 'connection_request' && <UserPlus className="w-3.5 h-3.5 text-amber-500" />}
+                              {n.type === 'connection_accepted' && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                              {n.type === 'follow' && <UserCheck className="w-3.5 h-3.5 text-indigo-500" />}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-slate-800 leading-snug ${!n.is_read ? 'font-bold' : 'font-normal'}`}>
+                                {n.message}
+                              </p>
+                              <span className="text-[10px] text-slate-400 mt-1 block">
+                                {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            {!n.is_read && (
+                              <span className="w-2 h-2 rounded-full bg-teal-600 mt-1 flex-shrink-0" />
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Persona Switcher Pill */}
               <button
                 onClick={() => setIsSwitchModalOpen(true)}

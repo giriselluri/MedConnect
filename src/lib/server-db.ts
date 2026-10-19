@@ -15,6 +15,10 @@ import {
   CaseStudyStatus,
   UserRole,
   Role,
+  JobListing,
+  Advertisement,
+  Notification,
+  Follow,
 } from '@/types';
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -35,6 +39,9 @@ export interface DatabaseState {
   bookmarks: Bookmark[];
   ai_sessions: AISession[];
   content_reports: ContentReport[];
+  jobs: JobListing[];
+  advertisements: Advertisement[];
+  notifications: Notification[];
   current_user_id: string; // for demo switching
 }
 
@@ -777,6 +784,136 @@ const INITIAL_REPORTS: ContentReport[] = [
   },
 ];
 
+const INITIAL_JOBS: JobListing[] = [
+  {
+    id: 'job-001',
+    title: 'Attending Interventional Cardiologist',
+    organization: 'Massachusetts Academic Heart Center',
+    location: 'Boston, MA (On-site)',
+    employment_type: 'Full-time',
+    specialty_id: 'cardiology',
+    specialty_name: 'Cardiology',
+    salary_range: '$420,000 - $510,000 / year',
+    description: 'Lead cardiac catheterization interventions, complex PCI protocols, and participate in multi-center clinical trials within our cardiovascular research institute.',
+    requirements: [
+      'Board certified/eligible in Interventional Cardiology',
+      'Active Massachusetts medical license or eligibility',
+      'Proficiency in intravascular ultrasound (IVUS) and mechanical circulatory support',
+      'Demonstrated commitment to clinical trial investigation',
+    ],
+    apply_url: 'https://example.com/careers/cardiology-001',
+    is_active: true,
+    is_demo: true,
+    created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: 'job-002',
+    title: 'Pediatric Critical Care Fellow / Junior Attending',
+    organization: "National Children's Medical Center",
+    location: 'Washington, DC',
+    employment_type: 'Fellowship',
+    specialty_id: 'pediatrics',
+    specialty_name: 'Pediatrics',
+    salary_range: '$195,000 - $240,000 / year',
+    description: 'High-acuity pediatric intensive care training program emphasizing pediatric extracorporeal membrane oxygenation (ECMO) and acute resuscitation research.',
+    requirements: [
+      'Completion of ACGME-accredited Pediatric Residency',
+      'Active PALS and BLS certifications',
+      'Eligible for District of Columbia medical licensure',
+    ],
+    apply_url: 'https://example.com/careers/pediatrics-002',
+    is_active: true,
+    is_demo: true,
+    created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+  {
+    id: 'job-003',
+    title: 'Associate Director of Clinical Oncology Trials',
+    organization: 'Metropolitan Cancer Research Institute',
+    location: 'New York, NY',
+    employment_type: 'Full-time',
+    specialty_id: 'oncology',
+    specialty_name: 'Oncology',
+    salary_range: '$390,000 - $480,000 / year',
+    description: 'Direct early-phase targeted oncology therapies and immunotherapy checkpoint resistance studies with 50% protected research time.',
+    requirements: [
+      'MD or MD/PhD with Fellowship in Hematology/Oncology',
+      'Minimum 4 years experience leading Phase I/II clinical trials',
+      'Track record of peer-reviewed clinical research publications',
+    ],
+    apply_url: 'https://example.com/careers/oncology-003',
+    is_active: true,
+    is_demo: true,
+    created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_ADVERTISEMENTS: Advertisement[] = [
+  {
+    id: 'ad-001',
+    title: 'CardioVascular Horizons 2026 Annual Symposium',
+    sponsor: 'American Academy of Cardiology Education',
+    headline: 'Advance Your Interventional & Imaging Clinical Skills',
+    body_text: 'Join 1,200+ cardiology peers for 3 days of live case transmissions, high-definition IVUS workshops, and 24 AMA PRA Category 1 CME Credits in Boston.',
+    target_url: 'https://example.com/cardio-horizons-2026',
+    cta_text: 'Register for CME (Demo)',
+    specialty_id: 'cardiology',
+    specialty_name: 'Cardiology',
+    is_active: true,
+    is_demo: true,
+    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: 'ad-002',
+    title: 'DeepHistology Diagnostic AI Platform',
+    sponsor: 'DeepHistology Clinical Systems',
+    headline: 'Sub-cellular Tumor Margin Identification with 99.4% Concordance',
+    body_text: 'Streamline frozen section turnaround times and enhance pathology triage with real-time deep learning histology workflows. Request a clinical demonstration.',
+    target_url: 'https://example.com/deephistology-demo',
+    cta_text: 'Request Clinical Demo (Demo)',
+    specialty_id: 'oncology',
+    specialty_name: 'Oncology',
+    is_active: true,
+    is_demo: true,
+    created_at: new Date(Date.now() - 4 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 4 * 86400000).toISOString(),
+  },
+];
+
+const INITIAL_NOTIFICATIONS: Notification[] = [
+  {
+    id: 'notif-001',
+    user_id: '00000000-0000-0000-0000-000000000001', // Sarah Jenkins
+    actor_id: '00000000-0000-0000-0000-000000000002', // Marcus Chen
+    type: 'post_like',
+    message: 'Dr. Marcus Chen, MD, FACC liked your post.',
+    is_read: false,
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 'notif-002',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    actor_id: '00000000-0000-0000-0000-000000000003', // Aris Thorne
+    type: 'connection_request',
+    message: 'Dr. Aris Thorne, MD sent you a connection request.',
+    is_read: false,
+    created_at: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: 'notif-003',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    actor_id: '00000000-0000-0000-0000-000000000004', // Sophia Vance
+    type: 'post_comment',
+    message: 'Dr. Sophia Vance, MD, PhD commented on your case study.',
+    is_read: true,
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
 export class ServerDatabase {
   private static instance: ServerDatabase;
   private state: DatabaseState;
@@ -799,7 +936,13 @@ export class ServerDatabase {
       }
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        // Ensure new collections exist even on existing DB files
+        if (!parsed.jobs || parsed.jobs.length === 0) parsed.jobs = INITIAL_JOBS;
+        if (!parsed.advertisements || parsed.advertisements.length === 0) parsed.advertisements = INITIAL_ADVERTISEMENTS;
+        if (!parsed.notifications) parsed.notifications = INITIAL_NOTIFICATIONS;
+        if (!parsed.follows) parsed.follows = [];
+        return parsed;
       }
     } catch (e) {
       console.error('Error loading DB file, initializing fresh state:', e);
@@ -829,6 +972,9 @@ export class ServerDatabase {
       bookmarks: [],
       ai_sessions: [],
       content_reports: INITIAL_REPORTS,
+      jobs: INITIAL_JOBS,
+      advertisements: INITIAL_ADVERTISEMENTS,
+      notifications: INITIAL_NOTIFICATIONS,
       current_user_id: '00000000-0000-0000-0000-000000000001', // Default to Sarah Jenkins (Admin)
     };
 
@@ -1035,6 +1181,18 @@ export class ServerDatabase {
           (b) => b.user_id === effectiveUserId && b.item_type === 'post' && b.item_id === post.id
         );
 
+        let repost_of: Post | undefined = undefined;
+        if (post.repost_of_id) {
+          const orig = this.state.posts.find((p) => p.id === post.repost_of_id);
+          if (orig) {
+            repost_of = {
+              ...orig,
+              author: this.getProfileById(orig.author_id) || INITIAL_PROFILES[0],
+              specialty: orig.specialty_id ? this.state.specialties.find((s) => s.id === orig.specialty_id) : undefined,
+            };
+          }
+        }
+
         return {
           ...post,
           author,
@@ -1043,6 +1201,7 @@ export class ServerDatabase {
           comments_count: postComments.length,
           is_liked,
           is_bookmarked,
+          repost_of,
         };
       })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -1123,6 +1282,19 @@ export class ServerDatabase {
       });
       post.likes_count += 1;
       is_liked = true;
+
+      // Trigger notification if liking someone else's post
+      if (post.author_id !== userId) {
+        const actor = this.getProfileById(userId);
+        this.createNotification({
+          user_id: post.author_id,
+          actor_id: userId,
+          type: 'post_like',
+          item_id: post.id,
+          item_title: post.content.substring(0, 45) + '...',
+          message: `${actor?.full_name || 'A user'} liked your post.`,
+        });
+      }
     }
     this.saveState(this.state);
     return { likes_count: post.likes_count, is_liked };
@@ -1145,8 +1317,36 @@ export class ServerDatabase {
 
     this.state.comments.push(newComment);
     post.comments_count += 1;
+
+    // Trigger notification if commenting on someone else's post
+    if (post.author_id !== authorId) {
+      this.createNotification({
+        user_id: post.author_id,
+        actor_id: authorId,
+        type: 'post_comment',
+        item_id: post.id,
+        item_title: post.content.substring(0, 45) + '...',
+        message: `${author.full_name} commented on your post: "${content.substring(0, 30)}..."`,
+      });
+    }
+
     this.saveState(this.state);
     return newComment;
+  }
+
+  public updateComment(commentId: string, content: string, userId: string, isAdmin: boolean): Comment {
+    const comment = this.state.comments.find((c) => c.id === commentId);
+    if (!comment) throw new Error('Comment not found');
+    if (comment.author_id !== userId && !isAdmin) {
+      throw new Error('Unauthorized to edit this comment');
+    }
+    comment.content = content.trim();
+    comment.updated_at = new Date().toISOString();
+    this.saveState(this.state);
+    return {
+      ...comment,
+      author: this.getProfileById(comment.author_id) || INITIAL_PROFILES[0],
+    };
   }
 
   public deleteComment(commentId: string, userId: string, isAdmin: boolean): boolean {
@@ -1162,6 +1362,52 @@ export class ServerDatabase {
     }
     this.saveState(this.state);
     return true;
+  }
+
+  public repostPost(postId: string, userId: string, quoteComment?: string): Post {
+    const originalPost = this.state.posts.find((p) => p.id === postId);
+    if (!originalPost) throw new Error('Original post not found');
+
+    const author = this.getProfileById(userId) || INITIAL_PROFILES[0];
+    const newPost: Post = {
+      id: `repost_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      author_id: userId,
+      author,
+      content: quoteComment?.trim() || '',
+      repost_of_id: originalPost.id,
+      specialty_id: originalPost.specialty_id,
+      topic_tags: originalPost.topic_tags,
+      visibility: 'everyone',
+      likes_count: 0,
+      comments_count: 0,
+      reposts_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      comments: [],
+    };
+
+    originalPost.reposts_count = (originalPost.reposts_count || 0) + 1;
+    this.state.posts.unshift(newPost);
+
+    if (originalPost.author_id !== userId) {
+      this.createNotification({
+        user_id: originalPost.author_id,
+        actor_id: userId,
+        type: 'repost',
+        item_id: newPost.id,
+        item_title: originalPost.content.substring(0, 45) + '...',
+        message: `${author.full_name} reposted your post.`,
+      });
+    }
+
+    this.saveState(this.state);
+    return {
+      ...newPost,
+      repost_of: {
+        ...originalPost,
+        author: this.getProfileById(originalPost.author_id) || INITIAL_PROFILES[0],
+      },
+    };
   }
 
   public areUsersConnected(userA?: string, userB?: string): boolean {
@@ -1504,6 +1750,44 @@ export class ServerDatabase {
     return { is_member, members_count };
   }
 
+  public createGroup(payload: {
+    name: string;
+    description: string;
+    specialty_id?: string;
+    category?: string;
+    avatar_url?: string;
+    is_private?: boolean;
+  }, creatorId: string): Group {
+    const slug = payload.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || `group-${Date.now()}`;
+
+    const newGroup: Group = {
+      id: `grp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: payload.name.trim(),
+      slug,
+      description: payload.description.trim(),
+      specialty_id: payload.specialty_id,
+      banner_url: payload.avatar_url || 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=600',
+      topic_tags: [],
+      created_by: creatorId,
+      members_count: 1,
+      created_at: new Date().toISOString(),
+    };
+
+    this.state.groups.push(newGroup);
+    this.state.group_members.push({
+      group_id: newGroup.id,
+      user_id: creatorId,
+      role: 'admin',
+      joined_at: new Date().toISOString(),
+    });
+
+    this.saveState(this.state);
+    return newGroup;
+  }
+
   // --- Connections & Follows ---
   public getConnections(userId: string): {
     connections: Connection[];
@@ -1563,6 +1847,16 @@ export class ServerDatabase {
     };
 
     this.state.connections.push(newConnection);
+
+    // Trigger notification to recipient
+    const requester = this.getProfileById(requesterId);
+    this.createNotification({
+      user_id: recipientId,
+      actor_id: requesterId,
+      type: 'connection_request',
+      message: `${requester?.full_name || 'A clinician'} sent you a connection request.`,
+    });
+
     this.saveState(this.state);
     return newConnection;
   }
@@ -1583,10 +1877,91 @@ export class ServerDatabase {
       const p2 = this.state.profiles.find((p) => p.id === conn.recipient_id);
       if (p1) p1.connections_count = (p1.connections_count || 0) + 1;
       if (p2) p2.connections_count = (p2.connections_count || 0) + 1;
+
+      // Notify the other user that their connection request was accepted
+      const targetUserId = conn.requester_id === userId ? conn.recipient_id : conn.requester_id;
+      const accepter = this.getProfileById(userId);
+      this.createNotification({
+        user_id: targetUserId,
+        actor_id: userId,
+        type: 'connection_accepted',
+        message: `${accepter?.full_name || 'Your peer'} accepted your connection request.`,
+      });
     }
 
     this.saveState(this.state);
     return conn;
+  }
+
+  public removeConnection(connectionId: string, userId: string): boolean {
+    const idx = this.state.connections.findIndex((c) => c.id === connectionId);
+    if (idx === -1) return false;
+    const conn = this.state.connections[idx];
+
+    if (conn.requester_id !== userId && conn.recipient_id !== userId) {
+      throw new Error('Unauthorized');
+    }
+
+    if (conn.status === 'accepted') {
+      const p1 = this.state.profiles.find((p) => p.id === conn.requester_id);
+      const p2 = this.state.profiles.find((p) => p.id === conn.recipient_id);
+      if (p1 && p1.connections_count) p1.connections_count = Math.max(0, p1.connections_count - 1);
+      if (p2 && p2.connections_count) p2.connections_count = Math.max(0, p2.connections_count - 1);
+    }
+
+    this.state.connections.splice(idx, 1);
+    this.saveState(this.state);
+    return true;
+  }
+
+  // --- Follows ---
+  public followUser(followerId: string, followingId: string): boolean {
+    if (followerId === followingId) return false;
+    if (!this.state.follows) this.state.follows = [];
+    const exists = this.state.follows.some(
+      (f) => f.follower_id === followerId && f.following_id === followingId
+    );
+    if (exists) return true;
+
+    this.state.follows.push({
+      follower_id: followerId,
+      following_id: followingId,
+      created_at: new Date().toISOString(),
+    });
+
+    const follower = this.getProfileById(followerId);
+    this.createNotification({
+      user_id: followingId,
+      actor_id: followerId,
+      type: 'follow',
+      message: `${follower?.full_name || 'A clinician'} started following you.`,
+    });
+
+    this.saveState(this.state);
+    return true;
+  }
+
+  public unfollowUser(followerId: string, followingId: string): boolean {
+    if (!this.state.follows) return true;
+    this.state.follows = this.state.follows.filter(
+      (f) => !(f.follower_id === followerId && f.following_id === followingId)
+    );
+    this.saveState(this.state);
+    return true;
+  }
+
+  public isFollowing(followerId?: string, followingId?: string): boolean {
+    if (!followerId || !followingId || !this.state.follows) return false;
+    return this.state.follows.some(
+      (f) => f.follower_id === followerId && f.following_id === followingId
+    );
+  }
+
+  public getFollowStats(userId: string): { followersCount: number; followingCount: number } {
+    if (!this.state.follows) return { followersCount: 0, followingCount: 0 };
+    const followersCount = this.state.follows.filter((f) => f.following_id === userId).length;
+    const followingCount = this.state.follows.filter((f) => f.follower_id === userId).length;
+    return { followersCount, followingCount };
   }
 
   // --- Bookmarks ---
@@ -1666,6 +2041,11 @@ export class ServerDatabase {
     const totalGroups = this.state.groups.length;
     const pendingReports = this.state.content_reports.filter((r) => r.status === 'pending').length;
 
+    const totalJobs = (this.state.jobs || []).length;
+    const activeJobs = (this.state.jobs || []).filter((j) => j.is_active).length;
+    const totalAds = (this.state.advertisements || []).length;
+    const activeAds = (this.state.advertisements || []).filter((a) => a.is_active).length;
+
     return {
       totalUsers,
       totalPosts,
@@ -1675,6 +2055,10 @@ export class ServerDatabase {
       archivedCaseStudies,
       totalGroups,
       pendingReports,
+      totalJobs,
+      activeJobs,
+      totalAds,
+      activeAds,
     };
   }
 
@@ -1693,6 +2077,201 @@ export class ServerDatabase {
     report.reviewed_by = adminId;
     this.saveState(this.state);
     return report;
+  }
+
+  // --- Jobs Management ---
+  public getJobs(options?: { specialty_id?: string; is_active?: boolean; search?: string }): JobListing[] {
+    let list = this.state.jobs || [];
+    if (options?.is_active !== undefined) {
+      list = list.filter((j) => j.is_active === options.is_active);
+    }
+    if (options?.specialty_id) {
+      list = list.filter((j) => j.specialty_id === options.specialty_id);
+    }
+    if (options?.search) {
+      const q = options.search.toLowerCase();
+      list = list.filter((j) =>
+        j.title.toLowerCase().includes(q) ||
+        j.organization.toLowerCase().includes(q) ||
+        j.location.toLowerCase().includes(q) ||
+        j.description.toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public getJobById(id: string): JobListing | null {
+    return (this.state.jobs || []).find((j) => j.id === id) || null;
+  }
+
+  public createJob(payload: Partial<JobListing>): JobListing {
+    const newJob: JobListing = {
+      id: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: payload.title || 'Untitled Opportunity',
+      organization: payload.organization || 'Medical Institution',
+      location: payload.location || 'Remote / Hybrid',
+      employment_type: payload.employment_type || 'Full-time',
+      specialty_id: payload.specialty_id,
+      specialty_name: payload.specialty_name,
+      salary_range: payload.salary_range,
+      description: payload.description || '',
+      requirements: payload.requirements || [],
+      apply_url: payload.apply_url || 'https://example.com/apply',
+      is_active: payload.is_active !== undefined ? payload.is_active : true,
+      is_demo: payload.is_demo !== undefined ? payload.is_demo : true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (!this.state.jobs) this.state.jobs = [];
+    this.state.jobs.unshift(newJob);
+    this.saveState(this.state);
+    return newJob;
+  }
+
+  public updateJob(id: string, payload: Partial<JobListing>): JobListing {
+    const job = (this.state.jobs || []).find((j) => j.id === id);
+    if (!job) throw new Error('Job listing not found');
+    Object.assign(job, payload, { updated_at: new Date().toISOString() });
+    this.saveState(this.state);
+    return job;
+  }
+
+  public deleteJob(id: string): boolean {
+    const beforeLen = (this.state.jobs || []).length;
+    this.state.jobs = (this.state.jobs || []).filter((j) => j.id !== id);
+    if (this.state.jobs.length !== beforeLen) {
+      this.saveState(this.state);
+      return true;
+    }
+    return false;
+  }
+
+  // --- Advertisements Management ---
+  public getAdvertisements(options?: { specialty_id?: string; is_active?: boolean; search?: string }): Advertisement[] {
+    let list = this.state.advertisements || [];
+    if (options?.is_active !== undefined) {
+      list = list.filter((a) => a.is_active === options.is_active);
+    }
+    if (options?.specialty_id) {
+      list = list.filter((a) => a.specialty_id === options.specialty_id);
+    }
+    if (options?.search) {
+      const q = options.search.toLowerCase();
+      list = list.filter((a) =>
+        a.title.toLowerCase().includes(q) ||
+        a.sponsor.toLowerCase().includes(q) ||
+        a.headline.toLowerCase().includes(q) ||
+        a.body_text.toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public getAdvertisementById(id: string): Advertisement | null {
+    return (this.state.advertisements || []).find((a) => a.id === id) || null;
+  }
+
+  public createAdvertisement(payload: Partial<Advertisement>): Advertisement {
+    const newAd: Advertisement = {
+      id: `ad_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: payload.title || 'Featured Educational Program',
+      sponsor: payload.sponsor || 'Clinical Sponsor',
+      headline: payload.headline || '',
+      body_text: payload.body_text || '',
+      image_url: payload.image_url,
+      target_url: payload.target_url || 'https://example.com',
+      cta_text: payload.cta_text || 'Learn More (Demo)',
+      specialty_id: payload.specialty_id,
+      specialty_name: payload.specialty_name,
+      is_active: payload.is_active !== undefined ? payload.is_active : true,
+      is_demo: payload.is_demo !== undefined ? payload.is_demo : true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (!this.state.advertisements) this.state.advertisements = [];
+    this.state.advertisements.unshift(newAd);
+    this.saveState(this.state);
+    return newAd;
+  }
+
+  public updateAdvertisement(id: string, payload: Partial<Advertisement>): Advertisement {
+    const ad = (this.state.advertisements || []).find((a) => a.id === id);
+    if (!ad) throw new Error('Advertisement not found');
+    Object.assign(ad, payload, { updated_at: new Date().toISOString() });
+    this.saveState(this.state);
+    return ad;
+  }
+
+  public deleteAdvertisement(id: string): boolean {
+    const beforeLen = (this.state.advertisements || []).length;
+    this.state.advertisements = (this.state.advertisements || []).filter((a) => a.id !== id);
+    if (this.state.advertisements.length !== beforeLen) {
+      this.saveState(this.state);
+      return true;
+    }
+    return false;
+  }
+
+  // --- Notifications Management ---
+  public createNotification(payload: {
+    user_id: string;
+    actor_id: string;
+    type: Notification['type'];
+    item_id?: string;
+    item_title?: string;
+    message: string;
+  }): Notification | null {
+    if (payload.user_id === payload.actor_id) return null;
+    if (!this.state.notifications) this.state.notifications = [];
+
+    const newNotif: Notification = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      user_id: payload.user_id,
+      actor_id: payload.actor_id,
+      type: payload.type,
+      item_id: payload.item_id,
+      item_title: payload.item_title,
+      message: payload.message,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+
+    this.state.notifications.unshift(newNotif);
+    this.saveState(this.state);
+    return newNotif;
+  }
+
+  public getNotifications(userId: string): { notifications: Notification[]; unread_count: number } {
+    const list = (this.state.notifications || [])
+      .filter((n) => n.user_id === userId)
+      .map((n) => ({
+        ...n,
+        actor: this.getProfileById(n.actor_id) || undefined,
+      }))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const unread_count = list.filter((n) => !n.is_read).length;
+    return { notifications: list, unread_count };
+  }
+
+  public markNotificationRead(notificationId: string, userId: string): boolean {
+    const notif = (this.state.notifications || []).find((n) => n.id === notificationId && n.user_id === userId);
+    if (!notif) return false;
+    notif.is_read = true;
+    this.saveState(this.state);
+    return true;
+  }
+
+  public markAllNotificationsRead(userId: string): boolean {
+    let updated = false;
+    for (const n of this.state.notifications || []) {
+      if (n.user_id === userId && !n.is_read) {
+        n.is_read = true;
+        updated = true;
+      }
+    }
+    if (updated) this.saveState(this.state);
+    return true;
   }
 }
 

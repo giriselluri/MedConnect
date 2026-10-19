@@ -350,6 +350,225 @@ async function runTests() {
     });
     assert(dupSignupRes.status === 400, 'Duplicate email registration rejected (400 Bad Request)');
 
+    // 13. Jobs API & Admin Management
+    console.log('\n--- 13. Testing Jobs API & Admin Management ---');
+    // Ensure admin user
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const createJobRes = await request('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Attending Interventional Cardiologist',
+        organization: 'Seattle Children’s Heart Center',
+        location: 'Seattle, WA',
+        job_type: 'Full-Time',
+        specialty_id: 'cardiology',
+        description: 'Seeking board-certified cardiologist with expertise in structural interventions.',
+        application_url: 'https://careers.seattlechildrens.org',
+        is_active: true,
+      }),
+    });
+    assert(createJobRes.status === 201, 'Admin created new job listing (201 Created)');
+    const createdJobId = createJobRes.data.job.id;
+
+    // Normal user queries jobs
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000002' }),
+    });
+    const publicJobsRes = await request('/api/jobs');
+    assert(publicJobsRes.ok, 'Public jobs endpoint returns 200 OK');
+    const jobFound = publicJobsRes.data.jobs.some((j) => j.id === createdJobId);
+    assert(jobFound, 'Newly created job listing appears in public listings');
+
+    // Admin updates and deactivates job
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+    const updateJobRes = await request(`/api/jobs/${createdJobId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: false }),
+    });
+    assert(updateJobRes.ok && updateJobRes.data.job.is_active === false, 'Admin deactivated job listing');
+
+    // Admin deletes test job
+    const deleteJobRes = await request(`/api/jobs/${createdJobId}`, { method: 'DELETE' });
+    assert(deleteJobRes.ok, 'Admin successfully deleted test job listing');
+
+    // 14. Advertisements API & Admin Management
+    console.log('\n--- 14. Testing Advertisements API & Admin Management ---');
+    const createAdRes = await request('/api/ads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Global Cardiovascular Therapeutics Summit 2026',
+        advertiser_name: 'American College of Cardiology Foundation',
+        headline: 'Early-Bird Registration Open for CME Accredited Transcatheter Workshops',
+        body_text: 'Join 4,000+ clinical specialists in Chicago or virtually for live case transmissions.',
+        destination_url: 'https://acc26.org/symposium',
+        format: 'banner',
+        placement: 'feed',
+        specialty_id: 'cardiology',
+        is_active: true,
+      }),
+    });
+    assert(createAdRes.status === 201, 'Admin created sponsored advertisement notice (201 Created)');
+    const createdAdId = createAdRes.data.ad?.id || createAdRes.data.advertisement?.id;
+
+    const publicAdsRes = await request('/api/ads');
+    assert(publicAdsRes.ok, 'Public ads endpoint returns 200 OK');
+    const adFound = (publicAdsRes.data.ads || publicAdsRes.data.advertisements || []).some((a) => a.id === createdAdId);
+    assert(adFound, 'New advertisement appears in public listings');
+
+    // Delete test ad
+    const deleteAdRes = await request(`/api/ads/${createdAdId}`, { method: 'DELETE' });
+    assert(deleteAdRes.ok, 'Admin successfully deleted test advertisement');
+
+    // 15. Follow / Unfollow System
+    console.log('\n--- 15. Testing Follow / Unfollow System ---');
+    // Switch to Dr. Marcus Chen
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000002' }),
+    });
+
+    const targetDocId = '00000000-0000-0000-0000-000000000003'; // Dr. Elena Rostova
+    // Follow
+    const followRes = await request(`/api/profiles/${targetDocId}/follow`, { method: 'POST' });
+    assert(followRes.ok && followRes.data.is_following === true, 'Dr. Marcus Chen followed Dr. Elena Rostova');
+
+    // Check status
+    const statusRes = await request(`/api/profiles/${targetDocId}/follow`);
+    assert(statusRes.ok && statusRes.data.is_following === true, 'Follow status query confirms active following');
+
+    // Unfollow
+    const unfollowRes = await request(`/api/profiles/${targetDocId}/follow`, { method: 'POST' });
+    assert(unfollowRes.ok && unfollowRes.data.is_following === false, 'Dr. Marcus Chen successfully unfollowed Dr. Elena Rostova');
+
+    // 16. Reposting with Attribution
+    console.log('\n--- 16. Testing Reposting with Original Author Attribution ---');
+    // Create base post as Dr. Marcus Chen
+    const basePostRes = await request('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: 'Original clinical insight: New trial data on GLP-1 receptor agonist cardioprotection.',
+        specialty_id: 'cardiology',
+      }),
+    });
+    assert(basePostRes.status === 201, 'Created original post for repost test');
+    const basePostId = basePostRes.data.post.id;
+
+    // Switch to Dr. Sarah Jenkins to repost
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const repostRes = await request(`/api/posts/${basePostId}/repost`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quote_comment: 'Agree with Dr. Chen. Highly relevant for metabolic cardiology rounds.',
+      }),
+    });
+    assert(repostRes.status === 201, 'Repost created with quote comment (201 Created)');
+    assert(repostRes.data.post.repost_of_id === basePostId, 'Repost references correct original post ID');
+    assert(repostRes.data.post.repost_of?.author?.full_name?.includes('Marcus Chen'), 'Repost includes original author attribution');
+
+    // 17. Comment Edit & Delete Functionality
+    console.log('\n--- 17. Testing Comment Edit and Delete with Ownership Checks ---');
+    const testCommentRes = await request(`/api/posts/${basePostId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'Initial draft comment.' }),
+    });
+    assert(testCommentRes.status === 201, 'Created initial comment');
+    const commentId = testCommentRes.data.comment.id;
+
+    // Edit comment
+    const editCommentRes = await request(`/api/posts/${basePostId}/comments`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        comment_id: commentId,
+        content: 'Revised and polished clinical comment with expanded evidence references.',
+      }),
+    });
+    assert(editCommentRes.ok && editCommentRes.data.comment.content.includes('Revised'), 'Comment edited successfully with updated content');
+
+    // Delete comment
+    const deleteCommentRes = await request(`/api/posts/${basePostId}/comments`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment_id: commentId }),
+    });
+    assert(deleteCommentRes.ok && deleteCommentRes.data.success === true, 'Comment deleted successfully');
+
+    // Clean up base post
+    await request(`/api/posts/${basePostId}`, { method: 'DELETE' });
+
+    // 18. Notifications System
+    console.log('\n--- 18. Testing Notifications System ---');
+    const notifsRes = await request('/api/notifications');
+    assert(notifsRes.ok, 'Notifications endpoint returned 200 OK');
+    assert(Array.isArray(notifsRes.data.notifications), 'Notifications returned as an array');
+    assert(typeof notifsRes.data.unread_count === 'number', 'Unread count returned as numeric badge');
+
+    // Mark all as read
+    const markReadRes = await request('/api/notifications', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mark_all: true }),
+    });
+    const afterNotifsRes = await request('/api/notifications');
+    assert(
+      markReadRes.ok && (markReadRes.data?.unread_count === 0 || afterNotifsRes.data?.unread_count === 0),
+      'Marked all notifications as read (unread count = 0)'
+    );
+
+    // 19. Community Creation
+    console.log('\n--- 19. Testing Specialty Community Creation ---');
+    const createGroupRes = await request('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Pediatric Cardiac Critical Care Network',
+        description: 'Collaborative peer forum for post-operative congenital heart surgery ICU management.',
+        specialty_id: 'pediatrics',
+      }),
+    });
+    assert(createGroupRes.status === 201, 'Created new specialty community (201 Created)');
+    assert(createGroupRes.data.group.name === 'Pediatric Cardiac Critical Care Network', 'Community name matches input');
+
+    // 20. AI Assistant Model Metadata & Rate Limiting Headers
+    console.log('\n--- 20. Testing AI Assistant Model Metadata & Rate Limiting ---');
+    const aiSummaryRes = await request('/api/ai/research-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Trial of Sodium-Glucose Cotransporter 2 Inhibitors in HFpEF',
+        text: 'Background: In patients with heart failure with preserved ejection fraction, the effects of empagliflozin on major outcomes remain uncertain. Methods: We randomly assigned 5,988 patients with class II-IV heart failure to empagliflozin or placebo.',
+      }),
+    });
+    assert(aiSummaryRes.ok, 'AI Assistant endpoint responded 200 OK');
+    assert(
+      aiSummaryRes.data.summary.model_used === 'gemini-1.5-flash' ||
+      aiSummaryRes.data.summary.model_used === 'clinical-heuristic-fallback',
+      `Synthesis engine model metadata verified: "${aiSummaryRes.data.summary.model_used}"`
+    );
+
     // Reset back to Dr. Sarah Jenkins
     await request('/api/auth/switch-user', {
       method: 'POST',

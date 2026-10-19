@@ -33,6 +33,10 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Edit fields
@@ -48,9 +52,10 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
     setIsLoading(true);
     setError(null);
     try {
-      const [profRes, postsRes] = await Promise.all([
+      const [profRes, postsRes, followRes] = await Promise.all([
         fetch(`/api/profiles/${params.id}`),
         fetch(`/api/posts`),
+        fetch(`/api/profiles/${params.id}/follow`),
       ]);
 
       if (!profRes.ok) throw new Error('Profile not found');
@@ -66,6 +71,13 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
         const postsData = await postsRes.json();
         const userPosts = (postsData.posts || []).filter((p: Post) => p.author_id === params.id);
         setPosts(userPosts);
+      }
+
+      if (followRes.ok) {
+        const fData = await followRes.json();
+        setIsFollowing(fData.is_following);
+        setFollowersCount(fData.followers_count || 0);
+        setFollowingCount(fData.following_count || 0);
       }
     } catch (e: any) {
       setError(e.message);
@@ -102,6 +114,23 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
       console.error(e);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleFollow = async () => {
+    setIsFollowLoading(true);
+    try {
+      const res = await fetch(`/api/profiles/${params.id}/follow`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setIsFollowing(data.is_following);
+        setFollowersCount(data.followers_count);
+        setFollowingCount(data.following_count);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsFollowLoading(false);
     }
   };
 
@@ -177,27 +206,41 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
                   <span>{isEditing ? 'Cancel Editing' : 'Edit Profile'}</span>
                 </button>
               ) : (
-                <button
-                  onClick={handleConnect}
-                  disabled={isConnected}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs ${
-                    isConnected
-                      ? 'bg-teal-100 text-teal-800'
-                      : 'bg-teal-700 hover:bg-teal-800 text-white'
-                  }`}
-                >
-                  {isConnected ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Request Sent</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Connect with Colleague</span>
-                    </>
-                  )}
-                </button>
+                <>
+                  <button
+                    onClick={handleToggleFollow}
+                    disabled={isFollowLoading}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition border ${
+                      isFollowing
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                    }`}
+                  >
+                    <span>{isFollowing ? 'Following' : 'Follow'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleConnect}
+                    disabled={isConnected}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs ${
+                      isConnected
+                        ? 'bg-teal-100 text-teal-800'
+                        : 'bg-teal-700 hover:bg-teal-800 text-white'
+                    }`}
+                  >
+                    {isConnected ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Request Sent</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Connect with Colleague</span>
+                      </>
+                    )}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -233,6 +276,13 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
                   <div className="flex items-center gap-1.5">
                     <Briefcase className="w-3.5 h-3.5 text-slate-400" />
                     <span>{profile.years_of_experience} Years Experience</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                    <span>{profile.connections_count || 0} Connections</span>
+                    <span>•</span>
+                    <span>{followersCount} Followers</span>
+                    <span>•</span>
+                    <span>{followingCount} Following</span>
                   </div>
                 </div>
               </div>
