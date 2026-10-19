@@ -144,13 +144,23 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
           >
             <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-teal-700' : ''}`} />
           </button>
-          <Link
-            href={`/case-studies/${caseStudy.id}`}
-            className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold text-xs transition shadow-2xs"
-          >
-            <span>Review Case</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          {caseStudy.password_protected ? (
+            <Link
+              href={`/case-studies/${caseStudy.id}`}
+              className="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition shadow-2xs"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Enter Password</span>
+            </Link>
+          ) : (
+            <Link
+              href={`/case-studies/${caseStudy.id}`}
+              className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold text-xs transition shadow-2xs"
+            >
+              <span>Review Case</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
         </div>
       </div>
     </div>

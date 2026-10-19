@@ -192,6 +192,121 @@ async function runTests() {
     assert(adminMetrics.data.metrics.totalUsers >= 10, 'Metrics reports 10+ registered professionals');
     assert(adminMetrics.data.metrics.publishedCaseStudies >= 7, 'Metrics reports published case studies count');
 
+    // 9. Admin Profile DP Verification
+    console.log('\n--- 9. Testing Admin DP Photo Verification ---');
+    const adminProfileRes = await request('/api/profiles/00000000-0000-0000-0000-000000000001');
+    assert(adminProfileRes.ok, 'Fetched Dr. Sarah Jenkins admin profile');
+    assert(
+      adminProfileRes.data.profile.avatar_url &&
+      adminProfileRes.data.profile.avatar_url.includes('photo-1551601651-2a8555f1a136') &&
+      !adminProfileRes.data.profile.avatar_url.includes('photo-1594824813629-4d6f43694f4c'),
+      'Admin default DP updated to valid verified doctor photo (photo-1551601651-2a8555f1a136)'
+    );
+
+    // 10. Private Case Study Password Prompt & Gate Acceptance Test
+    console.log('\n--- 10. Testing Private Case Study Password Prompt & Unlock ---');
+    // Admin creates a private case study with password protection
+    const createPrivateRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Confidential Neurosurgical Case: Giant Basilar Aneurysm',
+        short_summary: 'Surgical clip ligation and endovascular flow diversion in complex cerebrovascular anatomy.',
+        educational_content: 'Detailed operative surgical technique and intraoperative neuro-monitoring signals.',
+        learning_objectives: ['Review skull base approaches', 'Evaluate flow diversion vs clipping'],
+        source_references: ['Journal of Neurosurgery 2024'],
+        specialty_ids: ['neurology'],
+        status: 'published',
+        password_protected: true,
+        access_password: 'clinical2024',
+      }),
+    });
+    assert(createPrivateRes.status === 201, 'Created password-protected private case study');
+    const privateCaseId = createPrivateRes.data.caseStudy.id;
+
+    // Opening private case study without password MUST be locked
+    const lockedFetchRes = await request(`/api/case-studies/${privateCaseId}`);
+    assert(lockedFetchRes.ok, 'Fetched private case study record');
+    assert(lockedFetchRes.data.caseStudy.is_locked === true, 'Private case study is locked without password');
+    assert(lockedFetchRes.data.caseStudy.educational_content === '', 'Educational clinical content is protected and hidden');
+
+    // Attempting wrong password
+    const wrongPassRes = await request(`/api/case-studies/${privateCaseId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'wrong-passcode' }),
+    });
+    assert(wrongPassRes.status === 401, 'Incorrect password rejected with 401 Unauthorized');
+
+    // Entering correct password
+    const unlockRes = await request(`/api/case-studies/${privateCaseId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'clinical2024' }),
+    });
+    assert(unlockRes.ok && unlockRes.data.success === true, 'Unlocked private case study with valid password');
+    assert(unlockRes.data.caseStudy.is_locked === false, 'is_locked flag becomes false after unlocking');
+    assert(unlockRes.data.caseStudy.educational_content.includes('Detailed operative surgical technique'), 'Full educational content revealed after unlocking');
+
+    // 11. Auth Login Acceptance Test
+    console.log('\n--- 11. Testing Login API & Persona Switching ---');
+    const loginRes = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'marcus.chen@medconnect.local', password: 'clinical2024' }),
+    });
+    assert(loginRes.ok && loginRes.data.success === true, 'Logged in with doctor email (Dr. Marcus Chen)');
+    assert(loginRes.data.user.full_name === 'Dr. Marcus Chen, MD, FACC', 'Session switched to Dr. Marcus Chen');
+
+    const invalidLoginRes = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'nonexistent.user@hospital.com' }),
+    });
+    assert(invalidLoginRes.status === 404, 'Non-existent email returns 404 with helpful guidance');
+
+    // 12. Auth Signup Acceptance Test
+    console.log('\n--- 12. Testing Signup API & Onboarding ---');
+    const testEmail = `dr.newuser.${Date.now()}@universityhospital.edu`;
+    const signupRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Evelyn Reed, MD, PhD',
+        email: testEmail,
+        role: 'healthcare_professional',
+        title: 'Attending Pediatric Cardiologist',
+        institution: 'Boston Children’s Hospital',
+        location: 'Boston, MA',
+        specialty_ids: ['cardiology'],
+        bio: 'Focused on congenital heart defects and pediatric echocardiography.',
+        years_of_experience: 8,
+      }),
+    });
+    assert(signupRes.status === 201, 'New doctor registered successfully (201 Created)');
+    assert(signupRes.data.user.full_name === 'Dr. Evelyn Reed, MD, PhD', 'Profile contains registered clinical credentials');
+    assert(signupRes.data.user.email === testEmail, 'Email assigned correctly');
+
+    // Duplicate email registration should fail
+    const dupSignupRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Duplicate User',
+        email: testEmail,
+        role: 'healthcare_professional',
+        title: 'Physician',
+      }),
+    });
+    assert(dupSignupRes.status === 400, 'Duplicate email registration rejected (400 Bad Request)');
+
+    // Reset back to Dr. Sarah Jenkins
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
     console.log(`\n========================================`);
     console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
     console.log(`========================================\n`);

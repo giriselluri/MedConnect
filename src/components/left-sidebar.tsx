@@ -17,6 +17,8 @@ import {
   MapPin,
   ExternalLink,
   Bookmark,
+  LogIn,
+  UserPlus,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -44,8 +46,11 @@ export function LeftSidebar() {
           {/* Avatar */}
           <div className="relative -mt-10 mb-2.5 inline-block">
             <img
-              src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1594824813629-4d6f43694f4c?auto=format&fit=crop&q=80&w=150'}
+              src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&q=80&w=150'}
               alt={currentUser?.full_name || 'Profile'}
+              onError={(e) => {
+                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.full_name || 'Sarah Jenkins')}&background=0d9488&color=fff&bold=true`;
+              }}
               className="w-16 h-16 rounded-full object-cover border-3 border-white shadow-md bg-white"
             />
           </div>
@@ -183,6 +188,27 @@ export function LeftSidebar() {
           </Link>
         )}
       </nav>
+
+      {/* Account & Session Access */}
+      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-2.5 space-y-1 text-xs">
+        <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Account Access
+        </div>
+        <Link
+          href="/login"
+          className="flex items-center gap-2 px-2.5 py-1.5 text-slate-700 hover:text-teal-800 hover:bg-teal-50/60 rounded-lg transition font-medium"
+        >
+          <LogIn className="w-3.5 h-3.5 text-teal-600" />
+          <span>Sign In / Switch Doctor</span>
+        </Link>
+        <Link
+          href="/signup"
+          className="flex items-center gap-2 px-2.5 py-1.5 text-slate-700 hover:text-teal-800 hover:bg-teal-50/60 rounded-lg transition font-medium"
+        >
+          <UserPlus className="w-3.5 h-3.5 text-teal-600" />
+          <span>Register New Account</span>
+        </Link>
+      </div>
 
       {/* Specialty Filter Catalogue */}
       <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-3.5">

@@ -5,9 +5,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const { searchParams } = new URL(req.url);
     const password = searchParams.get('password') || undefined;
+    const bypass = searchParams.get('bypass') === 'true';
     const currentUser = serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
-    const caseStudy = serverDb.getCaseStudyById(params.id, isAdmin, password);
+    const caseStudy = serverDb.getCaseStudyById(params.id, isAdmin, password, bypass);
 
     if (!caseStudy) {
       return NextResponse.json({ error: 'Case study not found or not published' }, { status: 404 });

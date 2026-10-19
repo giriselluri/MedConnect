@@ -20,6 +20,8 @@ import {
   ChevronDown,
   RefreshCw,
   LogOut,
+  LogIn,
+  UserPlus,
   Stethoscope,
   ShieldCheck,
 } from 'lucide-react';
@@ -105,8 +107,11 @@ export function Navbar() {
                 >
                   <div className="relative">
                     <img
-                      src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1594824813629-4d6f43694f4c?auto=format&fit=crop&q=80&w=150'}
+                      src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&q=80&w=150'}
                       alt={currentUser?.full_name || 'Profile'}
+                      onError={(e) => {
+                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.full_name || 'Sarah Jenkins')}&background=0d9488&color=fff&bold=true`;
+                      }}
                       className="w-8 h-8 rounded-full object-cover border border-slate-200"
                     />
                     {isAdmin && (
@@ -169,11 +174,35 @@ export function Navbar() {
                         <RefreshCw className="w-4 h-4 text-teal-600" />
                         <span>Switch Healthcare Persona</span>
                       </button>
+                      <Link
+                        href="/login"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <LogIn className="w-4 h-4 text-teal-600" />
+                        <span>Sign In with Credentials</span>
+                      </Link>
+                      <Link
+                        href="/signup"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <UserPlus className="w-4 h-4 text-teal-600" />
+                        <span>Create Clinical Account</span>
+                      </Link>
                     </div>
 
                     <div className="border-t border-slate-100 pt-1">
-                      <div className="px-4 py-1.5 text-[10px] text-slate-400">
-                        Signed in as {currentUser?.role?.replace('_', ' ')}
+                      <div className="px-4 py-1.5 text-[10px] text-slate-400 flex items-center justify-between">
+                        <span>Signed in as {currentUser?.role?.replace('_', ' ')}</span>
+                        <Link
+                          href="/login"
+                          onClick={() => setIsProfileMenuOpen(false)}
+                          className="text-[10px] text-red-600 hover:text-red-800 font-semibold flex items-center gap-1"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          <span>Exit</span>
+                        </Link>
                       </div>
                     </div>
                   </div>

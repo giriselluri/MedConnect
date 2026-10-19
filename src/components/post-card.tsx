@@ -310,8 +310,11 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
           {/* Add Comment input */}
           <form onSubmit={handleAddComment} className="flex gap-2.5 items-start">
             <img
-              src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1594824813629-4d6f43694f4c?auto=format&fit=crop&q=80&w=100'}
+              src={currentUser?.avatar_url || 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&q=80&w=100'}
               alt={currentUser?.full_name || 'User'}
+              onError={(e) => {
+                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.full_name || 'User')}&background=0d9488&color=fff&bold=true`;
+              }}
               className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0"
             />
             <div className="flex-1 flex gap-2">

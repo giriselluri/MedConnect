@@ -13,6 +13,8 @@ import {
   ContentReport,
   ConnectionStatus,
   CaseStudyStatus,
+  UserRole,
+  Role,
 } from '@/types';
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -64,7 +66,7 @@ const INITIAL_PROFILES: Profile[] = [
     institution: 'Metropolitan Academic Health System',
     location: 'Boston, MA',
     bio: 'Cardiovascular specialist and healthcare administrator passionate about evidence-based clinical leadership, hospital quality improvement, and interdisciplinary collaboration.',
-    avatar_url: 'https://images.unsplash.com/photo-1594824813629-4d6f43694f4c?auto=format&fit=crop&q=80&w=250',
+    avatar_url: 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&q=80&w=250',
     years_of_experience: 21,
     qualifications: ['MD - Harvard Medical School', 'FACP - Fellow American College of Physicians', 'Executive Healthcare Leadership - MIT'],
     interests: ['Clinical Governance', 'Health Systems Engineering', 'Cardiovascular Prevention', 'AI in Clinical Triage'],
@@ -862,6 +864,81 @@ export class ServerDatabase {
     return this.enrichProfile(profile);
   }
 
+  public loginUser(identifier: string): Profile | null {
+    const q = identifier.trim().toLowerCase();
+    const profile = this.state.profiles.find(
+      (p) =>
+        p.email.toLowerCase() === q ||
+        p.id === identifier ||
+        p.full_name.toLowerCase().includes(q)
+    );
+    if (!profile) return null;
+    this.state.current_user_id = profile.id;
+    this.saveState(this.state);
+    return this.enrichProfile(profile);
+  }
+
+  public registerUser(payload: {
+    full_name: string;
+    email: string;
+    role: Role;
+    title: string;
+    institution?: string;
+    location?: string;
+    specialty_ids?: string[];
+    bio?: string;
+    years_of_experience?: number;
+    qualifications?: string[];
+  }): Profile {
+    const existing = this.state.profiles.find(
+      (p) => p.email.toLowerCase() === payload.email.trim().toLowerCase()
+    );
+    if (existing) {
+      throw new Error('An account with this email address already exists. Please sign in instead.');
+    }
+
+    const newId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      payload.full_name
+    )}&background=0d9488&color=fff&bold=true`;
+
+    const newProfile: Profile = {
+      id: newId,
+      email: payload.email.trim().toLowerCase(),
+      full_name: payload.full_name.trim(),
+      title: payload.title.trim(),
+      role: payload.role,
+      institution: payload.institution?.trim() || 'Academic Medical Center',
+      location: payload.location?.trim() || 'United States',
+      bio: payload.bio?.trim() || 'Practicing healthcare professional dedicated to evidence-based clinical care.',
+      avatar_url: avatar,
+      years_of_experience: Number(payload.years_of_experience) || 5,
+      qualifications: payload.qualifications && payload.qualifications.length > 0
+        ? payload.qualifications
+        : ['MD / Healthcare Credential'],
+      interests: [],
+      is_admin: payload.role === 'admin',
+      is_verified: true,
+      connections_count: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    this.state.profiles.push(newProfile);
+
+    if (payload.specialty_ids && payload.specialty_ids.length > 0) {
+      for (const spId of payload.specialty_ids) {
+        this.state.profile_specialties.push({
+          profile_id: newId,
+          specialty_id: spId,
+        });
+      }
+    }
+
+    this.state.current_user_id = newId;
+    this.saveState(this.state);
+    return this.enrichProfile(newProfile);
+  }
+
   // --- Specialties ---
   public getSpecialties(): Specialty[] {
     return this.state.specialties;
@@ -1140,14 +1217,14 @@ export class ServerDatabase {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getCaseStudyById(id: string, isAdmin: boolean = false, password?: string): (CaseStudy & { is_locked?: boolean }) | null {
+  public getCaseStudyById(id: string, isAdmin: boolean = false, password?: string, bypass: boolean = false): (CaseStudy & { is_locked?: boolean }) | null {
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) return null;
     if (cs.status !== 'published' && !isAdmin) {
       return null;
     }
     const isProtected = Boolean(cs.password_protected);
-    const isUnlocked = !isProtected || isAdmin || (password && password === cs.access_password);
+    const isUnlocked = !isProtected || (bypass && isAdmin) || (Boolean(password) && password === cs.access_password);
 
     const { access_password, ...sanitized } = cs;
 
@@ -1167,18 +1244,18 @@ export class ServerDatabase {
     };
   }
 
-  public verifyCaseStudyPassword(id: string, password: string): { valid: boolean; caseStudy?: CaseStudy; error?: string } {
+  public verifyCaseStudyPassword(id: string, password: string): { valid: boolean; caseStudy?: CaseStudy & { is_locked: boolean }; error?: string } {
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) {
       return { valid: false, error: 'Case study not found' };
     }
     if (!cs.password_protected) {
       const { access_password, ...sanitized } = cs;
-      return { valid: true, caseStudy: sanitized };
+      return { valid: true, caseStudy: { ...sanitized, is_locked: false } };
     }
     if (cs.access_password === password.trim()) {
       const { access_password, ...sanitized } = cs;
-      return { valid: true, caseStudy: sanitized };
+      return { valid: true, caseStudy: { ...sanitized, is_locked: false } };
     }
     return { valid: false, error: 'Incorrect access password. Please try again.' };
   }

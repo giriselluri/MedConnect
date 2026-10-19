@@ -6,6 +6,8 @@ export type UserRole =
   | 'pharmaceutical_professional'
   | 'other_healthcare_professional';
 
+export type Role = UserRole;
+
 export type CaseStudyStatus = 'draft' | 'published' | 'archived';
 
 export type ConnectionStatus = 'pending' | 'accepted' | 'declined' | 'blocked';
