@@ -522,6 +522,8 @@ Omeprazole was discontinued and replaced with famotidine. Topical triamcinolone 
     published_at: new Date(Date.now() - 11 * 86400000).toISOString(),
     views_count: 290,
     bookmarks_count: 38,
+    password_protected: true,
+    access_password: 'clinical2024',
     specialties: [
       { id: 'dermatology', name: 'Dermatology', category: 'Clinical Medicine' },
       { id: 'immunology', name: 'Immunology & Allergy', category: 'Clinical Medicine' },
@@ -978,6 +980,7 @@ export class ServerDatabase {
     article_title?: string;
     article_source?: string;
     group_id?: string;
+    visibility?: 'everyone' | 'connections' | 'followers' | 'group';
   }): Post {
     const author_id = payload.author_id || this.state.current_user_id;
     const author = this.getProfileById(author_id) || INITIAL_PROFILES[0];
@@ -995,6 +998,7 @@ export class ServerDatabase {
       specialty,
       topic_tags: payload.topic_tags || [],
       group_id: payload.group_id,
+      visibility: payload.visibility || 'everyone',
       likes_count: 0,
       comments_count: 0,
       reposts_count: 0,
@@ -1123,22 +1127,60 @@ export class ServerDatabase {
     }
 
     return list
-      .map((cs) => ({
-        ...cs,
-        is_bookmarked: this.state.bookmarks.some(
-          (b) => b.user_id === effectiveUserId && b.item_type === 'case_study' && b.item_id === cs.id
-        ),
-      }))
+      .map((cs) => {
+        const { access_password, ...sanitized } = cs;
+        return {
+          ...sanitized,
+          password_protected: Boolean(cs.password_protected),
+          is_bookmarked: this.state.bookmarks.some(
+            (b) => b.user_id === effectiveUserId && b.item_type === 'case_study' && b.item_id === cs.id
+          ),
+        };
+      })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getCaseStudyById(id: string, isAdmin: boolean = false): CaseStudy | null {
+  public getCaseStudyById(id: string, isAdmin: boolean = false, password?: string): (CaseStudy & { is_locked?: boolean }) | null {
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) return null;
     if (cs.status !== 'published' && !isAdmin) {
       return null;
     }
-    return cs;
+    const isProtected = Boolean(cs.password_protected);
+    const isUnlocked = !isProtected || isAdmin || (password && password === cs.access_password);
+
+    const { access_password, ...sanitized } = cs;
+
+    if (!isUnlocked) {
+      return {
+        ...sanitized,
+        is_locked: true,
+        educational_content: '',
+        learning_objectives: [],
+        source_references: [],
+      };
+    }
+
+    return {
+      ...sanitized,
+      is_locked: false,
+    };
+  }
+
+  public verifyCaseStudyPassword(id: string, password: string): { valid: boolean; caseStudy?: CaseStudy; error?: string } {
+    const cs = this.state.case_studies.find((c) => c.id === id);
+    if (!cs) {
+      return { valid: false, error: 'Case study not found' };
+    }
+    if (!cs.password_protected) {
+      const { access_password, ...sanitized } = cs;
+      return { valid: true, caseStudy: sanitized };
+    }
+    if (cs.access_password === password.trim()) {
+      const { access_password, ...sanitized } = cs;
+      return { valid: true, caseStudy: sanitized };
+    }
+    return { valid: false, error: 'Incorrect access password. Please try again.' };
   }
 
   public createCaseStudy(
@@ -1151,6 +1193,8 @@ export class ServerDatabase {
       specialty_ids: string[];
       author_id?: string;
       status: CaseStudyStatus;
+      password_protected?: boolean;
+      access_password?: string;
     },
     userId: string,
     isAdmin: boolean
@@ -1176,6 +1220,8 @@ export class ServerDatabase {
       published_at: payload.status === 'published' ? new Date().toISOString() : null,
       views_count: 0,
       bookmarks_count: 0,
+      password_protected: Boolean(payload.password_protected),
+      access_password: payload.access_password?.trim() || undefined,
       specialties: specialties.length > 0 ? specialties : [this.state.specialties[0]],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1183,12 +1229,13 @@ export class ServerDatabase {
 
     this.state.case_studies.unshift(newCaseStudy);
     this.saveState(this.state);
-    return newCaseStudy;
+    const { access_password, ...sanitized } = newCaseStudy;
+    return sanitized;
   }
 
   public updateCaseStudy(
     id: string,
-    updates: Partial<CaseStudy> & { specialty_ids?: string[] },
+    updates: Partial<CaseStudy> & { specialty_ids?: string[]; access_password?: string },
     userId: string,
     isAdmin: boolean
   ): CaseStudy {
@@ -1222,7 +1269,8 @@ export class ServerDatabase {
 
     this.state.case_studies[idx] = updated;
     this.saveState(this.state);
-    return updated;
+    const { access_password, ...sanitized } = updated;
+    return sanitized;
   }
 
   public deleteCaseStudy(id: string, userId: string, isAdmin: boolean): boolean {

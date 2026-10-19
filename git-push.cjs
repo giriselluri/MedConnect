@@ -5,39 +5,30 @@ const fs = require('fs');
 const dir = process.cwd();
 
 async function push() {
-  const tokenArg = process.argv[2];
-  const token = tokenArg || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-
-  console.log('Attempting git push to https://github.com/giriselluri/MedConnect.git...');
-
+  const token = process.argv[2];
   if (!token) {
-    console.log('Notice: No GitHub Personal Access Token provided.');
-    console.log('To push, run: GITHUB_TOKEN=your_token node git-push.cjs');
-    console.log('Or: node git-push.cjs your_token');
-    return;
+    console.error('No token provided');
+    process.exit(1);
   }
+
+  const urlWithToken = `https://${token}@github.com/giriselluri/MedConnect.git`;
+  console.log('Attempting push via embedded token URL...');
 
   try {
     const res = await git.push({
       fs,
       http,
       dir,
-      remote: 'origin',
+      url: urlWithToken,
       ref: 'main',
-      onAuth: () => {
-        return {
-          username: token,
-          password: '',
-        };
-      },
+      remoteRef: 'refs/heads/main',
+      force: true,
     });
-    console.log('✅ Git push to https://github.com/giriselluri/MedConnect.git completed successfully!');
-    console.log('Push summary:', JSON.stringify(res, null, 2));
+    console.log('✅ Push succeeded via embedded URL!');
+    console.log(JSON.stringify(res, null, 2));
   } catch (err) {
-    console.error('❌ Git push failed:', err.message || err);
-    if (err.data) {
-      console.error('Details:', err.data);
-    }
+    console.error('Push with URL token failed:', err.message || err);
+    if (err.data) console.error('Details:', err.data);
   }
 }
 

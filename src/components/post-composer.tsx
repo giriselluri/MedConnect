@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/context';
 import { Post } from '@/types';
 import {
@@ -12,6 +12,10 @@ import {
   FileCheck,
   Globe,
   Loader2,
+  Users,
+  UserCheck,
+  Compass,
+  ChevronDown,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -37,8 +41,27 @@ export function PostComposer({
   const [articleUrl, setArticleUrl] = useState('');
   const [articleTitle, setArticleTitle] = useState('');
   const [articleSource, setArticleSource] = useState('');
+  const [visibility, setVisibility] = useState<'everyone' | 'connections' | 'followers' | 'group'>(
+    groupId ? 'group' : 'everyone'
+  );
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId || '');
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/groups')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.groups) {
+          setGroups(data.groups);
+          if (!selectedGroupId && data.groups.length > 0) {
+            setSelectedGroupId(data.groups[0].id);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [selectedGroupId]);
 
   const handleAddTag = () => {
     const cleaned = tagsInput.replace(/[^a-zA-Z0-9]/g, '').trim();
@@ -70,7 +93,8 @@ export function PostComposer({
           article_url: articleUrl.trim() || undefined,
           article_title: articleTitle.trim() || undefined,
           article_source: articleSource.trim() || undefined,
-          group_id: groupId || undefined,
+          group_id: visibility === 'group' ? (selectedGroupId || groupId || undefined) : undefined,
+          visibility,
         }),
       });
 
@@ -190,6 +214,40 @@ export function PostComposer({
       {/* Bottom controls row */}
       <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Audience / Share-with Dropdown */}
+          <div className="relative inline-flex items-center">
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as any)}
+              className="text-xs bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-800 font-medium rounded-lg px-2.5 py-1.5 pr-6 appearance-none focus:outline-none cursor-pointer transition"
+              title="Select who can see this post"
+            >
+              <option value="everyone">🌐 Everyone</option>
+              <option value="connections">👥 Connections</option>
+              <option value="followers">👤 Followers</option>
+              <option value="group">🏢 Group</option>
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 pointer-events-none" />
+          </div>
+
+          {/* Group Picker if visibility is group and no fixed groupId was provided */}
+          {visibility === 'group' && !groupId && groups.length > 0 && (
+            <div className="relative inline-flex items-center">
+              <select
+                value={selectedGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="text-xs bg-teal-50 border border-teal-200 text-teal-900 font-medium rounded-lg px-2.5 py-1.5 pr-6 appearance-none focus:outline-none cursor-pointer"
+              >
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-teal-700 absolute right-2 pointer-events-none" />
+            </div>
+          )}
+
           {/* Specialty Picker */}
           <div className="relative inline-flex items-center">
             <select

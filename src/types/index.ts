@@ -51,6 +51,7 @@ export interface Post {
   specialty?: Specialty;
   topic_tags: string[];
   group_id?: string;
+  visibility?: 'everyone' | 'connections' | 'followers' | 'group';
   likes_count: number;
   comments_count: number;
   reposts_count: number;
@@ -86,6 +87,9 @@ export interface CaseStudy {
   views_count?: number;
   bookmarks_count?: number;
   specialties: Specialty[];
+  password_protected?: boolean;
+  access_password?: string; // only stored server-side, never returned in API
+  is_locked?: boolean;
   created_at: string;
   updated_at: string;
   is_bookmarked?: boolean;

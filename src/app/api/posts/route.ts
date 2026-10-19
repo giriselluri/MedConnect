@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       article_title: body.article_title,
       article_source: body.article_source,
       group_id: body.group_id,
+      visibility: body.visibility,
     });
 
     return NextResponse.json({ post }, { status: 201 });

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { Group } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
+import { LeftSidebar } from '@/components/left-sidebar';
 import {
   Compass,
   Users,
@@ -73,8 +74,16 @@ export default function CommunitiesPage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Navigation Sidebar */}
+        <div className="hidden lg:block lg:col-span-3">
+          <LeftSidebar />
+        </div>
+
+        {/* Main Communities Column */}
+        <div className="lg:col-span-9 space-y-6">
+          {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -199,6 +208,8 @@ export default function CommunitiesPage() {
           })}
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

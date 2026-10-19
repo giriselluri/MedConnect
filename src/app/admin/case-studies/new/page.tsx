@@ -16,6 +16,8 @@ import {
   BookOpen,
   Sparkles,
   Loader2,
+  Lock,
+  KeyRound,
 } from 'lucide-react';
 import { CaseStudyStatus } from '@/types';
 
@@ -37,6 +39,8 @@ export default function NewCaseStudyPage() {
   const [newReference, setNewReference] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(['cardiology']);
   const [status, setStatus] = useState<CaseStudyStatus>('published');
+  const [passwordProtected, setPasswordProtected] = useState(false);
+  const [accessPassword, setAccessPassword] = useState('clinical2024');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +97,8 @@ export default function NewCaseStudyPage() {
           source_references: sourceReferences,
           specialty_ids: selectedSpecialties,
           status: submitStatus,
+          password_protected: passwordProtected,
+          access_password: passwordProtected ? accessPassword.trim() : undefined,
           author_id: currentUser?.id,
         }),
       });
@@ -338,6 +344,50 @@ export default function NewCaseStudyPage() {
                 Add
               </button>
             </div>
+          </div>
+
+          {/* Privacy & Password Protection */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={passwordProtected}
+                    onChange={(e) => setPasswordProtected(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-teal-700" />
+                    Password-Protect Case Study (Private Access)
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                  When enabled, healthcare professionals and medical students will be prompted to enter a password to unlock the full clinical vignette, diagnostic data, and learning pearls.
+                </p>
+              </div>
+            </div>
+
+            {passwordProtected && (
+              <div className="pl-6 pt-2 space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Access Password *
+                </label>
+                <div className="relative max-w-sm">
+                  <input
+                    type="text"
+                    value={accessPassword}
+                    onChange={(e) => setAccessPassword(e.target.value)}
+                    placeholder="e.g. clinical2024"
+                    className="w-full pl-9 pr-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-teal-500 text-slate-900"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Share this password with colleagues or students authorized to review this restricted clinical case.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Bottom Actions */}

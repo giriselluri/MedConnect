@@ -3,9 +3,11 @@ import { serverDb } from '@/lib/server-db';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const { searchParams } = new URL(req.url);
+    const password = searchParams.get('password') || undefined;
     const currentUser = serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
-    const caseStudy = serverDb.getCaseStudyById(params.id, isAdmin);
+    const caseStudy = serverDb.getCaseStudyById(params.id, isAdmin, password);
 
     if (!caseStudy) {
       return NextResponse.json({ error: 'Case study not found or not published' }, { status: 404 });
@@ -14,6 +16,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ caseStudy });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch case study' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const body = await req.json();
+    const password = body.password || '';
+    const result = serverDb.verifyCaseStudyPassword(params.id, password);
+
+    if (!result.valid) {
+      return NextResponse.json({ error: result.error || 'Incorrect access password' }, { status: 401 });
+    }
+
+    return NextResponse.json({ success: true, caseStudy: result.caseStudy });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to verify case study password' }, { status: 500 });
   }
 }
 

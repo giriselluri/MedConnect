@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
         specialty_ids: body.specialty_ids,
         status: body.status || 'published',
         author_id: currentUser.id,
+        password_protected: Boolean(body.password_protected),
+        access_password: body.access_password,
       },
       currentUser.id,
       isAdmin

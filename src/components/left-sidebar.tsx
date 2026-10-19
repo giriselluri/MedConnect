@@ -2,20 +2,26 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import {
-  Bookmark,
+  Home,
+  Newspaper,
+  BookOpen,
+  FileText,
   Users,
   Compass,
-  BookOpen,
+  Sparkles,
   ShieldAlert,
   Building2,
   MapPin,
   ExternalLink,
+  Bookmark,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
 export function LeftSidebar() {
+  const pathname = usePathname();
   const { currentUser, specialties, activeSpecialty, setActiveSpecialty, bookmarks } = useApp();
 
   const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
@@ -111,40 +117,72 @@ export function LeftSidebar() {
         )}
       </div>
 
-      {/* Clinical Quick Navigation */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-3 space-y-1 text-xs">
-        <Link
-          href="/case-studies"
-          className="flex items-center justify-between px-3 py-2 rounded-lg text-slate-700 hover:bg-teal-50 hover:text-teal-900 font-medium transition"
-        >
-          <span className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-teal-600" />
-            Clinical Case Studies
-          </span>
-          <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-full">
-            Peer Reviewed
-          </span>
-        </Link>
-        <Link
-          href="/communities"
-          className="flex items-center justify-between px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition"
-        >
-          <span className="flex items-center gap-2">
-            <Compass className="w-4 h-4 text-slate-500" />
-            Specialty Groups
-          </span>
-          <span className="text-[10px] text-slate-400">6 active</span>
-        </Link>
-        <Link
-          href="/network"
-          className="flex items-center justify-between px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition"
-        >
-          <span className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-slate-500" />
-            Directory & Invites
-          </span>
-        </Link>
-      </div>
+      {/* Primary Navigation Menu */}
+      <nav className="bg-white rounded-xl shadow-xs border border-slate-200 p-2 space-y-1">
+        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Platform Navigation
+        </div>
+        {[
+          { href: '/', label: 'Home Feed', icon: Home },
+          { href: '/news', label: 'Medical News', icon: Newspaper },
+          { href: '/case-studies', label: 'Case Studies', icon: BookOpen, badge: 'Clinical' },
+          { href: '/journals', label: 'Medical Journals', icon: FileText },
+          { href: '/network', label: 'My Network', icon: Users },
+          { href: '/communities', label: 'Communities', icon: Compass },
+          { href: '/research-assistant', label: 'AI Assistant', icon: Sparkles, highlight: true },
+        ].map((link) => {
+          const Icon = link.icon;
+          const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition ${
+                isActive
+                  ? 'bg-teal-50 text-teal-800 font-bold border-l-3 border-teal-600'
+                  : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Icon
+                  className={`w-4 h-4 ${
+                    link.highlight
+                      ? 'text-teal-600'
+                      : isActive
+                      ? 'text-teal-700'
+                      : 'text-slate-500'
+                  }`}
+                />
+                <span>{link.label}</span>
+              </div>
+              {link.badge && (
+                <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-full">
+                  {link.badge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              pathname.startsWith('/admin')
+                ? 'bg-amber-50 text-amber-900 font-bold border-l-3 border-amber-600'
+                : 'text-amber-800 hover:bg-amber-50/60'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <ShieldAlert className="w-4 h-4 text-amber-600" />
+              <span>Admin Portal</span>
+            </div>
+            <span className="text-[9px] font-extrabold uppercase bg-amber-500 text-white px-1.5 py-0.2 rounded">
+              Admin
+            </span>
+          </Link>
+        )}
+      </nav>
 
       {/* Specialty Filter Catalogue */}
       <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-3.5">

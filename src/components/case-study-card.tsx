@@ -12,6 +12,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Check,
+  Lock,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -71,7 +72,13 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
             ))}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            {caseStudy.password_protected && (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Lock className="w-3 h-3 text-amber-600" />
+                Private Case
+              </span>
+            )}
             <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-teal-600" />
               Educational Case

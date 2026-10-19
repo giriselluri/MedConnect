@@ -15,6 +15,10 @@ import {
   Send,
   CheckCircle2,
   AlertCircle,
+  Users,
+  UserCheck,
+  Compass,
+  Globe,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -147,10 +151,26 @@ export function PostCard({ post, onPostDeleted }: PostCardProps) {
             <p className="text-xs text-slate-500 line-clamp-1 leading-snug">
               {post.author.title}
             </p>
-            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 flex-wrap">
               <span>{post.author.institution}</span>
               <span>•</span>
               <span>{formatTimeAgo(post.created_at)}</span>
+              <span>•</span>
+              <span className="inline-flex items-center gap-1 text-slate-500 font-medium capitalize" title={`Visible to: ${post.visibility || 'everyone'}`}>
+                {post.visibility === 'connections' && <Users className="w-3 h-3 text-teal-600" />}
+                {post.visibility === 'followers' && <UserCheck className="w-3 h-3 text-teal-600" />}
+                {post.visibility === 'group' && <Compass className="w-3 h-3 text-teal-600" />}
+                {(!post.visibility || post.visibility === 'everyone') && <Globe className="w-3 h-3 text-slate-400" />}
+                <span>
+                  {post.visibility === 'connections'
+                    ? 'Connections'
+                    : post.visibility === 'followers'
+                    ? 'Followers'
+                    : post.visibility === 'group'
+                    ? 'Group'
+                    : 'Everyone'}
+                </span>
+              </span>
             </div>
           </div>
         </Link>

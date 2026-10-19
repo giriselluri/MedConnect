@@ -83,66 +83,7 @@ export function Navbar() {
               </div>
             </div>
 
-            {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-              {navLinks.map((link) => {
-                const Icon = link.icon;
-                const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`relative flex flex-col items-center justify-center px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all group ${
-                      isActive
-                        ? 'text-teal-700 font-semibold'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="relative">
-                      <Icon
-                        className={`w-5 h-5 transition-transform group-hover:-translate-y-0.5 ${
-                          link.highlight
-                            ? 'text-teal-600'
-                            : isActive
-                            ? 'text-teal-700'
-                            : 'text-slate-500 group-hover:text-slate-700'
-                        }`}
-                      />
-                      {link.badge && (
-                        <span className="absolute -top-1 -right-2 px-1 py-0.2 text-[9px] font-bold bg-teal-100 text-teal-800 rounded-full">
-                          {link.badge}
-                        </span>
-                      )}
-                    </div>
-                    <span className="mt-1 text-[11px]">{link.label}</span>
-                    {isActive && (
-                      <span className="absolute bottom-0 inset-x-2 h-0.5 bg-teal-600 rounded-full" />
-                    )}
-                  </Link>
-                );
-              })}
-
-              {/* Admin Portal Nav Item (Always clearly visible & accessible) */}
-              <Link
-                href="/admin"
-                className={`flex flex-col items-center justify-center px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all relative ${
-                  pathname.startsWith('/admin')
-                    ? 'text-amber-800 font-semibold bg-amber-50/80 border border-amber-200'
-                    : 'text-slate-700 hover:bg-amber-50/50 hover:text-amber-900'
-                }`}
-              >
-                <div className="relative">
-                  <ShieldAlert className="w-5 h-5 text-amber-600" />
-                  <span className="absolute -top-1 -right-2 px-1 py-0.2 text-[9px] font-extrabold bg-amber-500 text-white rounded-full">
-                    Admin
-                  </span>
-                </div>
-                <span className="mt-1 text-[11px] font-semibold">Admin Portal</span>
-                {pathname.startsWith('/admin') && (
-                  <span className="absolute bottom-0 inset-x-2 h-0.5 bg-amber-600 rounded-full" />
-                )}
-              </Link>
-            </nav>
+            {/* Brand & Search occupy left side cleanly */}
 
             {/* Right: Persona Switcher & User Profile Menu */}
             <div className="flex items-center gap-2.5">
