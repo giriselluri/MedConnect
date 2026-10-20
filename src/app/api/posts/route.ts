@@ -5,8 +5,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get('groupId') || undefined;
-    const currentUser = serverDb.getCurrentUser();
-    const posts = serverDb.getPosts(currentUser.id, groupId);
+    const currentUser = await serverDb.getCurrentUser();
+    const posts = await serverDb.getPosts(currentUser.id, groupId);
     return NextResponse.json({ posts });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch posts' }, { status: 500 });
@@ -15,14 +15,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const body = await req.json();
 
     if (!body.content || body.content.trim().length === 0) {
       return NextResponse.json({ error: 'Post content cannot be empty' }, { status: 400 });
     }
 
-    const post = serverDb.createPost({
+    const post = await serverDb.createPost({
       content: body.content,
       author_id: currentUser.id,
       specialty_id: body.specialty_id,

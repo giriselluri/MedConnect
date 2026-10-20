@@ -3,9 +3,9 @@ import { serverDb } from '@/lib/server-db';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
-    const is_following = serverDb.isFollowing(currentUser.id, params.id);
-    const stats = serverDb.getFollowStats(params.id);
+    const currentUser = await serverDb.getCurrentUser();
+    const is_following = await serverDb.isFollowing(currentUser.id, params.id);
+    const stats = await serverDb.getFollowStats(params.id);
 
     return NextResponse.json({
       is_following,
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     if (currentUser.id === params.id) {
       return NextResponse.json({ error: 'You cannot follow yourself' }, { status: 400 });
     }
@@ -32,18 +32,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // Body is optional, default to toggle
     }
 
-    const currentlyFollowing = serverDb.isFollowing(currentUser.id, params.id);
+    const currentlyFollowing = await serverDb.isFollowing(currentUser.id, params.id);
     let is_following: boolean;
 
     if (action === 'follow' || (action === 'toggle' && !currentlyFollowing)) {
-      serverDb.followUser(currentUser.id, params.id);
+      await serverDb.followUser(currentUser.id, params.id);
       is_following = true;
     } else {
-      serverDb.unfollowUser(currentUser.id, params.id);
+      await serverDb.unfollowUser(currentUser.id, params.id);
       is_following = false;
     }
 
-    const stats = serverDb.getFollowStats(params.id);
+    const stats = await serverDb.getFollowStats(params.id);
     return NextResponse.json({
       is_following,
       followers_count: stats.followersCount,

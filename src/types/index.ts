@@ -88,6 +88,8 @@ export interface CaseStudy {
   author_id?: string;
   author_name: string;
   author_title?: string;
+  author_avatar_url?: string;
+  author_institution?: string;
   status: CaseStudyStatus;
   published_at?: string | null;
   views_count?: number;
@@ -209,6 +211,7 @@ export interface JobListing {
   title: string;
   organization: string;
   location: string;
+  workplace_type?: string;
   employment_type: 'Full-time' | 'Part-time' | 'Fellowship' | 'Locum Tenens';
   specialty_id?: string;
   specialty_name?: string;
@@ -257,4 +260,19 @@ export interface Follow {
   follower_id: string;
   following_id: string;
   created_at: string;
+}
+
+export interface AdminMetrics {
+  totalUsers: number;
+  totalPosts: number;
+  totalCaseStudies: number;
+  publishedCaseStudies: number;
+  draftCaseStudies: number;
+  archivedCaseStudies: number;
+  totalGroups: number;
+  pendingReports: number;
+  totalJobs: number;
+  activeJobs: number;
+  totalAds: number;
+  activeAds: number;
 }

@@ -24,12 +24,16 @@ import Link from 'next/link';
 
 export default function FeedPage() {
   const router = useRouter();
-  const { specialties, activeSpecialty, setActiveSpecialty } = useApp();
+  const { specialties, activeSpecialty, setActiveSpecialty, currentUser } = useApp();
   const [posts, setPosts] = useState<Post[]>([]);
   const [jobs, setJobs] = useState<JobListing[]>([]);
   const [ads, setAds] = useState<Advertisement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isDemoUser = Boolean(
+    currentUser && currentUser.is_demo !== false && currentUser.id?.startsWith('00000000-')
+  );
 
   // Authentication guard: redirect to /login if not authenticated
   useEffect(() => {
@@ -99,6 +103,10 @@ export default function FeedPage() {
   const filteredAds = activeSpecialty
     ? ads.filter((a) => a.specialty_id === activeSpecialty)
     : ads;
+
+  // Newly registered users should only see real user jobs/ads, not sample/demo data
+  const visibleJobs = isDemoUser ? filteredJobs : filteredJobs.filter((j) => !j.id.startsWith('job-00'));
+  const visibleAds = isDemoUser ? filteredAds : filteredAds.filter((a) => !a.id.startsWith('ad-00'));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -201,13 +209,17 @@ export default function FeedPage() {
             </div>
           ) : filteredPosts.length === 0 ? (
             <div className="space-y-4">
-              <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
-                <Stethoscope className="w-8 h-8 text-slate-400 mx-auto mb-1" />
-                <h4 className="font-bold text-slate-800 text-sm">No posts found</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3 shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 mx-auto">
+                  <Stethoscope className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-900 text-base">
+                  {activeSpecialty ? 'No posts in this specialty yet' : 'Welcome to your clinical feed'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                   {activeSpecialty
                     ? 'No posts matching the selected specialty tag. Try selecting "All Feed" or be the first to publish a clinical insight.'
-                    : 'Be the first to share a case reflection, clinical trial update, or practice inquiry.'}
+                    : 'Your feed displays updates from your colleagues and clinical network. Share a clinical case inquiry, trial reflection, or connect with peers to see their updates.'}
                 </p>
                 {activeSpecialty && (
                   <button
@@ -218,8 +230,12 @@ export default function FeedPage() {
                   </button>
                 )}
               </div>
-              {filteredJobs.length > 0 && <JobCard job={filteredJobs[0]} />}
-              {filteredAds.length > 0 && <AdCard ad={filteredAds[0]} />}
+              {isDemoUser && (
+                <>
+                  {visibleJobs.length > 0 && <JobCard job={visibleJobs[0]} />}
+                  {visibleAds.length > 0 && <AdCard ad={visibleAds[0]} />}
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -231,23 +247,23 @@ export default function FeedPage() {
                   />
 
                   {/* Interleave Job Opportunity after 1st post */}
-                  {idx === 0 && filteredJobs.length > 0 && (
-                    <JobCard job={filteredJobs[0]} />
+                  {idx === 0 && visibleJobs.length > 0 && (
+                    <JobCard job={visibleJobs[0]} />
                   )}
 
                   {/* Interleave Sponsored Ad after 2nd post */}
-                  {idx === 1 && filteredAds.length > 0 && (
-                    <AdCard ad={filteredAds[0]} />
+                  {idx === 1 && visibleAds.length > 0 && (
+                    <AdCard ad={visibleAds[0]} />
                   )}
 
                   {/* Interleave 2nd Job Opportunity after 3rd post */}
-                  {idx === 2 && filteredJobs.length > 1 && (
-                    <JobCard job={filteredJobs[1]} />
+                  {idx === 2 && visibleJobs.length > 1 && (
+                    <JobCard job={visibleJobs[1]} />
                   )}
 
                   {/* Interleave 2nd Sponsored Ad after 4th post */}
-                  {idx === 3 && filteredAds.length > 1 && (
-                    <AdCard ad={filteredAds[1]} />
+                  {idx === 3 && visibleAds.length > 1 && (
+                    <AdCard ad={visibleAds[1]} />
                   )}
                 </React.Fragment>
               ))}

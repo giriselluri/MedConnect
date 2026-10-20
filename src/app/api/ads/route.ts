@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     const is_active = is_active_param !== null ? is_active_param === 'true' : undefined;
 
-    const ads = serverDb.getAdvertisements({ specialty_id, is_active, search });
+    const ads = await serverDb.getAdvertisements({ specialty_id, is_active, search });
     return NextResponse.json({ ads });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch advertisements' }, { status: 500 });
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Headline is required' }, { status: 400 });
     }
 
-    const ad = serverDb.createAdvertisement({
+    const ad = await serverDb.createAdvertisement({
       ...body,
       sponsor,
       target_url,

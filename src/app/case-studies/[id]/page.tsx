@@ -254,15 +254,32 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
 
           {/* Author bar */}
           <div className="flex flex-wrap items-center gap-4 mt-5 pt-4 border-t border-slate-100 text-xs text-slate-500">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs">
-                {caseStudy.author_name.charAt(0)}
-              </div>
+            <Link
+              href={caseStudy.author_id ? `/profile/${caseStudy.author_id}` : '#'}
+              className="flex items-center gap-2 group/author"
+            >
+              <img
+                src={
+                  caseStudy.author_avatar_url ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(caseStudy.author_name || 'Clinician')}&background=0d9488&color=fff&bold=true`
+                }
+                alt={caseStudy.author_name}
+                className="w-8 h-8 rounded-full object-cover border border-slate-200 group-hover/author:ring-2 group-hover/author:ring-teal-500 transition"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(caseStudy.author_name || 'Clinician')}&background=0d9488&color=fff&bold=true`;
+                }}
+              />
               <div>
-                <span className="font-bold text-slate-900 block">{caseStudy.author_name}</span>
-                <span className="text-[11px] text-slate-500">{caseStudy.author_title}</span>
+                <span className="font-bold text-slate-900 group-hover/author:text-teal-700 block transition">
+                  {caseStudy.author_name}
+                </span>
+                <span className="text-[11px] text-slate-500 block">
+                  {caseStudy.author_title || 'Clinical Faculty'}
+                  {caseStudy.author_institution ? ` • ${caseStudy.author_institution}` : ''}
+                </span>
               </div>
-            </div>
+            </Link>
             <div className="h-4 w-px bg-slate-200 hidden sm:block" />
             <div className="flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />

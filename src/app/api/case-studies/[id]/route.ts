@@ -6,9 +6,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { searchParams } = new URL(req.url);
     const password = searchParams.get('password') || undefined;
     const bypass = searchParams.get('bypass') === 'true';
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
-    const caseStudy = serverDb.getCaseStudyById(params.id, isAdmin, password, bypass, currentUser?.id);
+    const caseStudy = await serverDb.getCaseStudyById(params.id, isAdmin, password, bypass, currentUser?.id);
 
     if (!caseStudy) {
       return NextResponse.json({ error: 'Case study not found or not published' }, { status: 404 });
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   try {
     const body = await req.json();
     const password = body.password || '';
-    const result = serverDb.verifyCaseStudyPassword(params.id, password);
+    const result = await serverDb.verifyCaseStudyPassword(params.id, password);
 
     if (!result.valid) {
       return NextResponse.json({ error: result.error || 'Incorrect access password' }, { status: 401 });
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     if (!isAdmin) {
@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const updates = await req.json();
-    const updated = serverDb.updateCaseStudy(params.id, updates, currentUser.id, isAdmin);
+    const updated = await serverDb.updateCaseStudy(params.id, updates, currentUser.id, isAdmin);
     return NextResponse.json({ caseStudy: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to update case study' }, { status: 500 });
@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     if (!isAdmin) {
@@ -68,7 +68,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       );
     }
 
-    const success = serverDb.deleteCaseStudy(params.id, currentUser.id, isAdmin);
+    const success = await serverDb.deleteCaseStudy(params.id, currentUser.id, isAdmin);
     if (!success) {
       return NextResponse.json({ error: 'Case study not found' }, { status: 404 });
     }

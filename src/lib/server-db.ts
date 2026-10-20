@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { isSupabaseConfigured } from './supabase';
+import { supabaseDb } from './supabase-db';
 import {
   Profile,
   Specialty,
@@ -19,10 +21,28 @@ import {
   Advertisement,
   Notification,
   Follow,
+  AdminMetrics,
 } from '@/types';
 
-const DATA_DIR = path.join(process.cwd(), '.data');
-const DB_FILE = path.join(DATA_DIR, 'medconnect_db.json');
+function getLocalDbFile(): string | null {
+  // Never attempt to create or write to .data under /var/task in serverless (e.g. Vercel)
+  if (
+    process.env.VERCEL === '1' ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    (typeof process.cwd === 'function' && process.cwd().startsWith('/var/task'))
+  ) {
+    return null;
+  }
+  try {
+    const dir = path.join(process.cwd(), '.data');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return path.join(dir, 'medconnect_db.json');
+  } catch {
+    return null;
+  }
+}
 
 export interface DatabaseState {
   specialties: Specialty[];
@@ -45,7 +65,7 @@ export interface DatabaseState {
   current_user_id: string; // for demo switching
 }
 
-const INITIAL_SPECIALTIES: Specialty[] = [
+export const INITIAL_SPECIALTIES: Specialty[] = [
   { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine', description: 'Cardiovascular diseases, interventions, and electrophysiology', icon: 'Heart' },
   { id: 'oncology', name: 'Oncology', category: 'Clinical Medicine', description: 'Medical, surgical, and radiation oncology therapeutics', icon: 'ShieldAlert' },
   { id: 'neurology', name: 'Neurology', category: 'Clinical Medicine', description: 'Brain, spinal cord, and neurodegenerative disorders', icon: 'Brain' },
@@ -63,7 +83,7 @@ const INITIAL_SPECIALTIES: Specialty[] = [
   { id: 'orthopedics', name: 'Orthopedic Surgery', category: 'Surgical', description: 'Musculoskeletal trauma, arthroplasty, and sports medicine', icon: 'Bone' },
 ];
 
-const INITIAL_PROFILES: Profile[] = [
+export const INITIAL_PROFILES: Profile[] = [
   {
     id: '00000000-0000-0000-0000-000000000001',
     email: 'sarah.jenkins@medconnect.local',
@@ -246,7 +266,7 @@ const INITIAL_PROFILES: Profile[] = [
   },
 ];
 
-const INITIAL_PROFILE_SPECIALTIES = [
+export const INITIAL_PROFILE_SPECIALTIES = [
   { profile_id: '00000000-0000-0000-0000-000000000001', specialty_id: 'internal_medicine', is_primary: true },
   { profile_id: '00000000-0000-0000-0000-000000000001', specialty_id: 'cardiology', is_primary: false },
   { profile_id: '00000000-0000-0000-0000-000000000002', specialty_id: 'cardiology', is_primary: true },
@@ -266,7 +286,7 @@ const INITIAL_PROFILE_SPECIALTIES = [
   { profile_id: '00000000-0000-0000-0000-000000000010', specialty_id: 'immunology', is_primary: true },
 ];
 
-const INITIAL_GROUPS: Group[] = [
+export const INITIAL_GROUPS: Group[] = [
   {
     id: '10000000-0000-0000-0000-000000000001',
     name: 'Cardiology Clinical Exchange',
@@ -335,7 +355,7 @@ const INITIAL_GROUPS: Group[] = [
   },
 ];
 
-const INITIAL_CASE_STUDIES: CaseStudy[] = [
+export const INITIAL_CASE_STUDIES: CaseStudy[] = [
   {
     id: '20000000-0000-0000-0000-000000000001',
     title: 'Acute Coronary Syndrome with Multivessel Disease in an Elderly Patient',
@@ -624,7 +644,7 @@ Blood and sputum cultures confirmed hypervirulent Klebsiella pneumoniae sensitiv
   },
 ];
 
-const INITIAL_POSTS: Post[] = [
+export const INITIAL_POSTS: Post[] = [
   {
     id: '30000000-0000-0000-0000-000000000001',
     author_id: '00000000-0000-0000-0000-000000000002',
@@ -735,7 +755,7 @@ const INITIAL_POSTS: Post[] = [
   },
 ];
 
-const INITIAL_CONNECTIONS: Connection[] = [
+export const INITIAL_CONNECTIONS: Connection[] = [
   {
     id: '50000000-0000-0000-0000-000000000001',
     requester_id: '00000000-0000-0000-0000-000000000001',
@@ -770,7 +790,7 @@ const INITIAL_CONNECTIONS: Connection[] = [
   },
 ];
 
-const INITIAL_REPORTS: ContentReport[] = [
+export const INITIAL_REPORTS: ContentReport[] = [
   {
     id: '60000000-0000-0000-0000-000000000001',
     reporter_id: '00000000-0000-0000-0000-000000000007',
@@ -784,7 +804,7 @@ const INITIAL_REPORTS: ContentReport[] = [
   },
 ];
 
-const INITIAL_JOBS: JobListing[] = [
+export const INITIAL_JOBS: JobListing[] = [
   {
     id: 'job-001',
     title: 'Attending Interventional Cardiologist',
@@ -851,7 +871,7 @@ const INITIAL_JOBS: JobListing[] = [
   },
 ];
 
-const INITIAL_ADVERTISEMENTS: Advertisement[] = [
+export const INITIAL_ADVERTISEMENTS: Advertisement[] = [
   {
     id: 'ad-001',
     title: 'CardioVascular Horizons 2026 Annual Symposium',
@@ -884,7 +904,7 @@ const INITIAL_ADVERTISEMENTS: Advertisement[] = [
   },
 ];
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
+export const INITIAL_NOTIFICATIONS: Notification[] = [
   {
     id: 'notif-001',
     user_id: '00000000-0000-0000-0000-000000000001', // Sarah Jenkins
@@ -930,12 +950,10 @@ export class ServerDatabase {
   }
 
   private loadState(): DatabaseState {
-    try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+    const dbFile = getLocalDbFile();
+    if (dbFile && fs.existsSync(dbFile)) {
+      try {
+        const raw = fs.readFileSync(dbFile, 'utf-8');
         const parsed = JSON.parse(raw);
         // Ensure new collections exist even on existing DB files
         if (!parsed.jobs || parsed.jobs.length === 0) parsed.jobs = INITIAL_JOBS;
@@ -950,9 +968,9 @@ export class ServerDatabase {
           });
         }
         return parsed;
+      } catch (e) {
+        console.warn('Error reading local DB file, initializing fresh state:', e);
       }
-    } catch (e) {
-      console.error('Error loading DB file, initializing fresh state:', e);
     }
 
     const defaultState: DatabaseState = {
@@ -990,26 +1008,50 @@ export class ServerDatabase {
   }
 
   private saveState(state: DatabaseState) {
+    const dbFile = getLocalDbFile();
+    if (!dbFile) return; // In serverless / read-only environment - skip disk write safely
     try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), 'utf-8');
+      fs.writeFileSync(dbFile, JSON.stringify(state, null, 2), 'utf-8');
     } catch (e) {
-      console.error('Error saving DB file:', e);
+      // Safe catch for local dev permission edge cases
     }
   }
 
   // --- Auth & Current Session ---
-  public getCurrentUser(): Profile {
-    const profile = this.state.profiles.find((p) => p.id === this.state.current_user_id);
+  public async getCurrentUser(): Promise<Profile> {
+    let effectiveUserId = this.state.current_user_id;
+    try {
+      const { cookies } = require('next/headers');
+      const cookieStore = cookies();
+      const sessionUserId = cookieStore.get('medconnect_session_user_id')?.value;
+      if (sessionUserId) {
+        effectiveUserId = sessionUserId;
+      }
+    } catch {
+      // outside request context or build time
+    }
+
+    if (isSupabaseConfigured) {
+      const p = await supabaseDb.getProfileById(effectiveUserId);
+      if (p) return p;
+      const all = await supabaseDb.getProfiles();
+      if (all.length > 0) return all[0];
+    }
+
+    const profile = this.state.profiles.find((p) => p.id === effectiveUserId);
     if (profile) {
       return this.enrichProfile(profile);
     }
     return this.enrichProfile(this.state.profiles[0]);
   }
 
-  public switchUser(userId: string): Profile | null {
+  public async switchUser(userId: string): Promise<Profile | null> {
+    if (isSupabaseConfigured) {
+      const profile = await supabaseDb.getProfileById(userId);
+      if (!profile) return null;
+      this.state.current_user_id = userId;
+      return profile;
+    }
     const profile = this.state.profiles.find((p) => p.id === userId);
     if (!profile) return null;
     this.state.current_user_id = userId;
@@ -1017,7 +1059,10 @@ export class ServerDatabase {
     return this.enrichProfile(profile);
   }
 
-  public loginUser(identifier: string): Profile | null {
+  public async loginUser(identifier: string): Promise<Profile | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.loginUser(identifier);
+    }
     const q = identifier.trim().toLowerCase();
     const profile = this.state.profiles.find(
       (p) =>
@@ -1031,7 +1076,7 @@ export class ServerDatabase {
     return this.enrichProfile(profile);
   }
 
-  public registerUser(payload: {
+  public async registerUser(payload: {
     full_name: string;
     email: string;
     role: Role;
@@ -1042,7 +1087,11 @@ export class ServerDatabase {
     bio?: string;
     years_of_experience?: number;
     qualifications?: string[];
-  }): Profile {
+    password?: string;
+  }): Promise<Profile> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.registerUser(payload);
+    }
     const existing = this.state.profiles.find(
       (p) => p.email.toLowerCase() === payload.email.trim().toLowerCase()
     );
@@ -1094,7 +1143,10 @@ export class ServerDatabase {
   }
 
   // --- Specialties ---
-  public getSpecialties(): Specialty[] {
+  public async getSpecialties(): Promise<Specialty[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getSpecialties();
+    }
     return this.state.specialties;
   }
 
@@ -1110,7 +1162,10 @@ export class ServerDatabase {
     };
   }
 
-  public getProfiles(filters?: { role?: string; specialty?: string; search?: string }): Profile[] {
+  public async getProfiles(filters?: { role?: string; specialty?: string; search?: string }): Promise<Profile[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getProfiles(filters);
+    }
     let result = this.state.profiles.map((p) => this.enrichProfile(p));
 
     if (filters?.role) {
@@ -1134,18 +1189,28 @@ export class ServerDatabase {
     return result;
   }
 
-  public getProfileById(id: string): Profile | null {
+  private getLocalProfileById(id: string): Profile | null {
     const p = this.state.profiles.find((x) => x.id === id);
     if (!p) return null;
     return this.enrichProfile(p);
   }
 
-  public updateProfile(id: string, updates: Partial<Profile>): Profile | null {
+  public async getProfileById(id: string): Promise<Profile | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getProfileById(id);
+    }
+    return this.getLocalProfileById(id);
+  }
+
+  public async updateProfile(id: string, updates: Partial<Profile>): Promise<Profile | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateProfile(id, updates);
+    }
     const idx = this.state.profiles.findIndex((x) => x.id === id);
     if (idx === -1) return null;
 
     // Security check: Protect admin flag from unauthorized client escalation
-    const currentUser = this.getCurrentUser();
+    const currentUser = await this.getCurrentUser();
     if (updates.is_admin !== undefined && !currentUser.is_admin) {
       delete updates.is_admin;
     }
@@ -1163,22 +1228,67 @@ export class ServerDatabase {
   }
 
   // --- Posts ---
-  public getPosts(currentUserId?: string, groupId?: string): Post[] {
+  public async getPosts(currentUserId?: string, groupId?: string): Promise<Post[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getPosts(currentUserId, groupId);
+    }
     const effectiveUserId = currentUserId || this.state.current_user_id;
     let list = this.state.posts;
     if (groupId) {
       list = list.filter((p) => p.group_id === groupId);
     }
 
+    const user = this.getLocalProfileById(effectiveUserId);
+    const isDemo = Boolean(user && user.is_demo !== false && user.id?.startsWith('00000000-'));
+
+    // Remove default/sample feeds for newly registered users.
+    // Show only relevant real user content.
+    if (!isDemo) {
+      list = list.filter((p) => {
+        // Exclude hardcoded/sample feed posts
+        if (p.id.startsWith('30000000-')) return false;
+
+        const postAuthor = this.getLocalProfileById(p.author_id);
+        // Exclude posts authored by default demo accounts
+        if (postAuthor?.is_demo || p.author_id.startsWith('00000000-')) {
+          return false;
+        }
+
+        // Include own posts
+        if (p.author_id === effectiveUserId) return true;
+
+        // Check audience visibility:
+        if (p.visibility === 'connections') {
+          return this.areUsersConnected(effectiveUserId, p.author_id);
+        }
+        if (p.visibility === 'followers') {
+          return this.isLocalFollowing(effectiveUserId, p.author_id) || this.areUsersConnected(effectiveUserId, p.author_id);
+        }
+        if (p.visibility === 'group' && p.group_id) {
+          return this.isUserInGroup(effectiveUserId, p.group_id);
+        }
+
+        // Real user public posts: show relevant content (connected, followed, or matching user's specialties)
+        const isConnected = this.areUsersConnected(effectiveUserId, p.author_id);
+        const isFollowing = this.isLocalFollowing(effectiveUserId, p.author_id);
+        const userSpecs = this.state.profile_specialties
+          .filter((ps) => ps.profile_id === effectiveUserId)
+          .map((ps) => ps.specialty_id);
+        const matchesSpecialty = Boolean(p.specialty_id && userSpecs.includes(p.specialty_id));
+
+        return isConnected || isFollowing || matchesSpecialty;
+      });
+    }
+
     return list
       .map((post) => {
-        const author = this.getProfileById(post.author_id) || INITIAL_PROFILES[0];
+        const author = this.getLocalProfileById(post.author_id) || INITIAL_PROFILES[0];
         const specialty = post.specialty_id ? this.state.specialties.find((s) => s.id === post.specialty_id) : undefined;
         const postComments = this.state.comments
           .filter((c) => c.post_id === post.id)
           .map((c) => ({
             ...c,
-            author: this.getProfileById(c.author_id) || INITIAL_PROFILES[0],
+            author: this.getLocalProfileById(c.author_id) || INITIAL_PROFILES[0],
           }))
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
@@ -1195,7 +1305,7 @@ export class ServerDatabase {
           if (orig) {
             repost_of = {
               ...orig,
-              author: this.getProfileById(orig.author_id) || INITIAL_PROFILES[0],
+              author: this.getLocalProfileById(orig.author_id) || INITIAL_PROFILES[0],
               specialty: orig.specialty_id ? this.state.specialties.find((s) => s.id === orig.specialty_id) : undefined,
             };
           }
@@ -1215,7 +1325,7 @@ export class ServerDatabase {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public createPost(payload: {
+  public async createPost(payload: {
     content: string;
     author_id?: string;
     specialty_id?: string;
@@ -1225,9 +1335,22 @@ export class ServerDatabase {
     article_source?: string;
     group_id?: string;
     visibility?: 'everyone' | 'connections' | 'followers' | 'group';
-  }): Post {
+  }): Promise<Post> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createPost({
+        author_id: payload.author_id || this.state.current_user_id,
+        content: payload.content,
+        specialty_id: payload.specialty_id,
+        topic_tags: payload.topic_tags,
+        article_url: payload.article_url,
+        article_title: payload.article_title,
+        article_source: payload.article_source,
+        group_id: payload.group_id,
+        visibility: payload.visibility,
+      });
+    }
     const author_id = payload.author_id || this.state.current_user_id;
-    const author = this.getProfileById(author_id) || INITIAL_PROFILES[0];
+    const author = this.getLocalProfileById(author_id) || INITIAL_PROFILES[0];
     const specialty = payload.specialty_id ? this.state.specialties.find((s) => s.id === payload.specialty_id) : undefined;
 
     const newPost: Post = {
@@ -1256,7 +1379,10 @@ export class ServerDatabase {
     return newPost;
   }
 
-  public deletePost(id: string, userId: string, isAdmin: boolean): boolean {
+  public async deletePost(id: string, userId: string, isAdmin: boolean): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.deletePost(id, userId, isAdmin);
+    }
     const post = this.state.posts.find((p) => p.id === id);
     if (!post) return false;
     if (post.author_id !== userId && !isAdmin) {
@@ -1269,7 +1395,10 @@ export class ServerDatabase {
     return true;
   }
 
-  public toggleLikePost(postId: string, userId: string): { likes_count: number; is_liked: boolean } {
+  public async toggleLikePost(postId: string, userId: string): Promise<{ likes_count: number; is_liked: boolean }> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.toggleLikePost(postId, userId);
+    }
     const post = this.state.posts.find((p) => p.id === postId);
     if (!post) throw new Error('Post not found');
 
@@ -1293,7 +1422,7 @@ export class ServerDatabase {
 
       // Trigger notification if liking someone else's post
       if (post.author_id !== userId) {
-        const actor = this.getProfileById(userId);
+        const actor = this.getLocalProfileById(userId);
         this.createNotification({
           user_id: post.author_id,
           actor_id: userId,
@@ -1308,11 +1437,14 @@ export class ServerDatabase {
     return { likes_count: post.likes_count, is_liked };
   }
 
-  public addComment(postId: string, authorId: string, content: string): Comment {
+  public async addComment(postId: string, authorId: string, content: string): Promise<Comment> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.addComment(postId, authorId, content);
+    }
     const post = this.state.posts.find((p) => p.id === postId);
     if (!post) throw new Error('Post not found');
 
-    const author = this.getProfileById(authorId) || INITIAL_PROFILES[0];
+    const author = this.getLocalProfileById(authorId) || INITIAL_PROFILES[0];
     const newComment: Comment = {
       id: `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       post_id: postId,
@@ -1342,7 +1474,10 @@ export class ServerDatabase {
     return newComment;
   }
 
-  public updateComment(commentId: string, content: string, userId: string, isAdmin: boolean): Comment {
+  public async updateComment(commentId: string, content: string, userId: string, isAdmin: boolean): Promise<Comment> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateComment(commentId, content, userId, isAdmin);
+    }
     const comment = this.state.comments.find((c) => c.id === commentId);
     if (!comment) throw new Error('Comment not found');
     if (comment.author_id !== userId && !isAdmin) {
@@ -1353,11 +1488,14 @@ export class ServerDatabase {
     this.saveState(this.state);
     return {
       ...comment,
-      author: this.getProfileById(comment.author_id) || INITIAL_PROFILES[0],
+      author: this.getLocalProfileById(comment.author_id) || INITIAL_PROFILES[0],
     };
   }
 
-  public deleteComment(commentId: string, userId: string, isAdmin: boolean): boolean {
+  public async deleteComment(commentId: string, userId: string, isAdmin: boolean): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.deleteComment(commentId, userId, isAdmin);
+    }
     const comment = this.state.comments.find((c) => c.id === commentId);
     if (!comment) return false;
     if (comment.author_id !== userId && !isAdmin) {
@@ -1372,11 +1510,14 @@ export class ServerDatabase {
     return true;
   }
 
-  public repostPost(postId: string, userId: string, quoteComment?: string): Post {
+  public async repostPost(postId: string, userId: string, quoteComment?: string): Promise<Post> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.repostPost(postId, userId, quoteComment);
+    }
     const originalPost = this.state.posts.find((p) => p.id === postId);
     if (!originalPost) throw new Error('Original post not found');
 
-    const author = this.getProfileById(userId) || INITIAL_PROFILES[0];
+    const author = this.getLocalProfileById(userId) || INITIAL_PROFILES[0];
     const newPost: Post = {
       id: `repost_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       author_id: userId,
@@ -1413,7 +1554,7 @@ export class ServerDatabase {
       ...newPost,
       repost_of: {
         ...originalPost,
-        author: this.getProfileById(originalPost.author_id) || INITIAL_PROFILES[0],
+        author: this.getLocalProfileById(originalPost.author_id) || INITIAL_PROFILES[0],
       },
     };
   }
@@ -1437,13 +1578,17 @@ export class ServerDatabase {
   }
 
   // --- Case Studies (Critical End-to-End Feature) ---
-  public getCaseStudies(options: {
+  public async getCaseStudies(options: {
     specialtyIds?: string[];
     search?: string;
     includeDraftsAndArchived?: boolean;
     currentUserId?: string;
     isAdmin?: boolean;
-  }): CaseStudy[] {
+    personalized?: boolean;
+  }): Promise<CaseStudy[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getCaseStudies(options);
+    }
     const effectiveUserId = options.currentUserId || this.state.current_user_id;
     let list = this.state.case_studies;
 
@@ -1482,6 +1627,33 @@ export class ServerDatabase {
       });
     }
 
+    // Personalization: Show case studies based on relevant specialisation and professional connections
+    if (options.personalized && !options.isAdmin) {
+      const userProfile = this.getLocalProfileById(effectiveUserId);
+      const userSpecialtyIds = (userProfile?.specialties || []).map((s) => s.id.toLowerCase());
+
+      list = list.filter((c) => {
+        // Author's own case studies
+        if (c.author_id === effectiveUserId) return true;
+
+        // Author is an established connection
+        if (this.areUsersConnected(effectiveUserId, c.author_id)) return true;
+
+        // Explicitly shared with user
+        if (c.shared_with_user_ids?.includes(effectiveUserId)) return true;
+
+        // Relevant clinical specialisation
+        if (userSpecialtyIds.length > 0) {
+          return c.specialties?.some((sp) =>
+            userSpecialtyIds.includes(sp.id.toLowerCase()) ||
+            userSpecialtyIds.includes(sp.name.toLowerCase())
+          );
+        }
+
+        return true;
+      });
+    }
+
     // Filter by Specialty IDs (Canonical matching)
     if (options.specialtyIds && options.specialtyIds.length > 0) {
       const targetIds = options.specialtyIds.map((s) => s.toLowerCase());
@@ -1509,8 +1681,13 @@ export class ServerDatabase {
       .map((cs) => {
         const { access_password, ...sanitized } = cs;
         const group = cs.group_id ? this.state.groups.find((g) => g.id === cs.group_id) : undefined;
+        const author = cs.author_id ? this.getLocalProfileById(cs.author_id) : null;
         return {
           ...sanitized,
+          author_name: author?.full_name || cs.author_name,
+          author_title: author?.title || cs.author_title,
+          author_avatar_url: author?.avatar_url || cs.author_avatar_url || (cs.author_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(cs.author_name)}&background=0d9488&color=fff&bold=true` : undefined),
+          author_institution: author?.institution || cs.author_institution,
           group,
           password_protected: Boolean(cs.password_protected),
           is_bookmarked: this.state.bookmarks.some(
@@ -1521,13 +1698,16 @@ export class ServerDatabase {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getCaseStudyById(
+  public async getCaseStudyById(
     id: string,
     isAdmin: boolean = false,
     password?: string,
     bypass: boolean = false,
     currentUserId?: string
-  ): (CaseStudy & { is_locked?: boolean }) | null {
+  ): Promise<(CaseStudy & { is_locked?: boolean }) | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getCaseStudyById(id, isAdmin, password, bypass, currentUserId);
+    }
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) return null;
     const effectiveUserId = currentUserId || this.state.current_user_id;
@@ -1549,10 +1729,24 @@ export class ServerDatabase {
 
     const { access_password, ...sanitized } = cs;
     const group = cs.group_id ? this.state.groups.find((g) => g.id === cs.group_id) : undefined;
+    const author = cs.author_id ? this.getLocalProfileById(cs.author_id) : null;
+    const author_name = author?.full_name || cs.author_name;
+    const author_title = author?.title || cs.author_title;
+    const author_avatar_url =
+      author?.avatar_url ||
+      cs.author_avatar_url ||
+      (author_name
+        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(author_name)}&background=0d9488&color=fff&bold=true`
+        : undefined);
+    const author_institution = author?.institution || cs.author_institution;
 
     if (!isUnlocked) {
       return {
         ...sanitized,
+        author_name,
+        author_title,
+        author_avatar_url,
+        author_institution,
         group,
         is_locked: true,
         educational_content: '',
@@ -1563,28 +1757,66 @@ export class ServerDatabase {
 
     return {
       ...sanitized,
+      author_name,
+      author_title,
+      author_avatar_url,
+      author_institution,
       group,
       is_locked: false,
     };
   }
 
-  public verifyCaseStudyPassword(id: string, password: string): { valid: boolean; caseStudy?: CaseStudy & { is_locked: boolean }; error?: string } {
+  public async verifyCaseStudyPassword(id: string, password: string): Promise<{ valid: boolean; caseStudy?: CaseStudy & { is_locked: boolean }; error?: string }> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.verifyCaseStudyPassword(id, password);
+    }
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) {
       return { valid: false, error: 'Case study not found' };
     }
+    const author = cs.author_id ? this.getLocalProfileById(cs.author_id) : null;
+    const author_name = author?.full_name || cs.author_name;
+    const author_title = author?.title || cs.author_title;
+    const author_avatar_url =
+      author?.avatar_url ||
+      cs.author_avatar_url ||
+      (author_name
+        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(author_name)}&background=0d9488&color=fff&bold=true`
+        : undefined);
+    const author_institution = author?.institution || cs.author_institution;
+
     if (!cs.password_protected) {
       const { access_password, ...sanitized } = cs;
-      return { valid: true, caseStudy: { ...sanitized, is_locked: false } };
+      return {
+        valid: true,
+        caseStudy: {
+          ...sanitized,
+          author_name,
+          author_title,
+          author_avatar_url,
+          author_institution,
+          is_locked: false,
+        },
+      };
     }
     if (cs.access_password === password.trim()) {
       const { access_password, ...sanitized } = cs;
-      return { valid: true, caseStudy: { ...sanitized, is_locked: false } };
+      return {
+        valid: true,
+        caseStudy: {
+          ...sanitized,
+          author_name,
+          author_title,
+          author_avatar_url,
+          author_institution,
+          is_locked: false,
+        },
+      };
     }
     return { valid: false, error: 'Incorrect access password. Please try again.' };
   }
 
-  public createCaseStudy(
+  public async createCaseStudy(
     payload: {
       title: string;
       short_summary: string;
@@ -1603,8 +1835,11 @@ export class ServerDatabase {
     },
     userId: string,
     isAdmin: boolean = false
-  ): CaseStudy {
-    const author = this.getProfileById(payload.author_id || userId) || this.getCurrentUser();
+  ): Promise<CaseStudy> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createCaseStudy(payload, userId);
+    }
+    const author = (payload.author_id ? this.getLocalProfileById(payload.author_id) : null) || this.getLocalProfileById(userId) || (await this.getCurrentUser());
     const specialties = this.state.specialties.filter((s) => payload.specialty_ids.includes(s.id));
     const group = payload.group_id ? this.state.groups.find((g) => g.id === payload.group_id) : undefined;
 
@@ -1621,6 +1856,12 @@ export class ServerDatabase {
       author_id: author.id,
       author_name: author.full_name,
       author_title: author.title,
+      author_avatar_url:
+        author.avatar_url ||
+        (author.full_name
+          ? `https://ui-avatars.com/api/?name=${encodeURIComponent(author.full_name)}&background=0d9488&color=fff&bold=true`
+          : undefined),
+      author_institution: author.institution,
       status: payload.status || 'published',
       published_at: payload.status !== 'draft' ? new Date().toISOString() : null,
       views_count: 0,
@@ -1643,12 +1884,15 @@ export class ServerDatabase {
     return sanitized;
   }
 
-  public updateCaseStudy(
+  public async updateCaseStudy(
     id: string,
     updates: Partial<CaseStudy> & { specialty_ids?: string[]; access_password?: string },
     userId: string,
     isAdmin: boolean
-  ): CaseStudy {
+  ): Promise<CaseStudy> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateCaseStudy(id, updates, userId, isAdmin);
+    }
     const cs = this.state.case_studies.find((c) => c.id === id);
     if (!cs) throw new Error('Case study not found');
     if (!isAdmin && cs.author_id !== userId) {
@@ -1685,7 +1929,10 @@ export class ServerDatabase {
     return sanitized;
   }
 
-  public deleteCaseStudy(id: string, userId: string, isAdmin: boolean): boolean {
+  public async deleteCaseStudy(id: string, userId: string, isAdmin: boolean): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.deleteCaseStudy(id, userId, isAdmin);
+    }
     if (!isAdmin) {
       throw new Error('Forbidden: Only administrators can delete case studies');
     }
@@ -1698,7 +1945,10 @@ export class ServerDatabase {
   }
 
   // --- Groups / Communities ---
-  public getGroups(currentUserId?: string): Group[] {
+  public async getGroups(currentUserId?: string): Promise<Group[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getGroups();
+    }
     const effectiveUserId = currentUserId || this.state.current_user_id;
     return this.state.groups.map((group) => {
       const specialty = group.specialty_id ? this.state.specialties.find((s) => s.id === group.specialty_id) : undefined;
@@ -1715,7 +1965,10 @@ export class ServerDatabase {
     });
   }
 
-  public getGroupBySlug(slug: string, currentUserId?: string): Group | null {
+  public async getGroupBySlug(slug: string, currentUserId?: string): Promise<Group | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getGroupBySlug(slug, currentUserId);
+    }
     const group = this.state.groups.find((g) => g.slug === slug || g.id === slug);
     if (!group) return null;
     const effectiveUserId = currentUserId || this.state.current_user_id;
@@ -1732,7 +1985,11 @@ export class ServerDatabase {
     };
   }
 
-  public toggleJoinGroup(groupId: string, userId: string): { is_member: boolean; members_count: number } {
+  public async toggleJoinGroup(groupId: string, userId: string): Promise<{ is_member: boolean; members_count: number }> {
+    if (isSupabaseConfigured) {
+      const res = await supabaseDb.toggleGroupMembership(groupId, userId);
+      return { is_member: res.joined, members_count: res.members_count };
+    }
     const group = this.state.groups.find((g) => g.id === groupId);
     if (!group) throw new Error('Group not found');
 
@@ -1758,14 +2015,17 @@ export class ServerDatabase {
     return { is_member, members_count };
   }
 
-  public createGroup(payload: {
+  public async createGroup(payload: {
     name: string;
     description: string;
     specialty_id?: string;
     category?: string;
     avatar_url?: string;
     is_private?: boolean;
-  }, creatorId: string): Group {
+  }, creatorId: string): Promise<Group> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createGroup(payload, creatorId);
+    }
     const slug = payload.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -1797,18 +2057,30 @@ export class ServerDatabase {
   }
 
   // --- Connections & Follows ---
-  public getConnections(userId: string): {
+  public async getConnections(userId: string): Promise<{
     connections: Connection[];
     pendingIncoming: Connection[];
     pendingOutgoing: Connection[];
-  } {
+    pending_sent?: Connection[];
+    pending_received?: Connection[];
+  }> {
+    if (isSupabaseConfigured) {
+      const res = await supabaseDb.getConnections(userId);
+      return {
+        connections: res.connections,
+        pendingIncoming: res.pending_received,
+        pendingOutgoing: res.pending_sent,
+        pending_sent: res.pending_sent,
+        pending_received: res.pending_received,
+      };
+    }
     const connections: Connection[] = [];
     const pendingIncoming: Connection[] = [];
     const pendingOutgoing: Connection[] = [];
 
     for (const c of this.state.connections) {
-      const requester = this.getProfileById(c.requester_id) || undefined;
-      const recipient = this.getProfileById(c.recipient_id) || undefined;
+      const requester = this.getLocalProfileById(c.requester_id) || undefined;
+      const recipient = this.getLocalProfileById(c.recipient_id) || undefined;
       const enriched: Connection = { ...c, requester, recipient };
 
       if (c.status === 'accepted' && (c.requester_id === userId || c.recipient_id === userId)) {
@@ -1825,7 +2097,10 @@ export class ServerDatabase {
     return { connections, pendingIncoming, pendingOutgoing };
   }
 
-  public sendConnectionRequest(requesterId: string, recipientId: string): Connection {
+  public async sendConnectionRequest(requesterId: string, recipientId: string): Promise<Connection> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.sendConnectionRequest(requesterId, recipientId);
+    }
     if (requesterId === recipientId) {
       throw new Error('Cannot send connection request to yourself');
     }
@@ -1857,8 +2132,8 @@ export class ServerDatabase {
     this.state.connections.push(newConnection);
 
     // Trigger notification to recipient
-    const requester = this.getProfileById(requesterId);
-    this.createNotification({
+    const requester = this.enrichProfile(this.state.profiles.find((p) => p.id === requesterId) || this.state.profiles[0]);
+    await this.createNotification({
       user_id: recipientId,
       actor_id: requesterId,
       type: 'connection_request',
@@ -1869,7 +2144,10 @@ export class ServerDatabase {
     return newConnection;
   }
 
-  public updateConnectionStatus(connectionId: string, status: ConnectionStatus, userId: string): Connection {
+  public async updateConnectionStatus(connectionId: string, status: ConnectionStatus, userId: string): Promise<Connection> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateConnectionStatus(connectionId, status, userId);
+    }
     const conn = this.state.connections.find((c) => c.id === connectionId);
     if (!conn) throw new Error('Connection not found');
 
@@ -1888,8 +2166,8 @@ export class ServerDatabase {
 
       // Notify the other user that their connection request was accepted
       const targetUserId = conn.requester_id === userId ? conn.recipient_id : conn.requester_id;
-      const accepter = this.getProfileById(userId);
-      this.createNotification({
+      const accepter = this.enrichProfile(this.state.profiles.find((p) => p.id === userId) || this.state.profiles[0]);
+      await this.createNotification({
         user_id: targetUserId,
         actor_id: userId,
         type: 'connection_accepted',
@@ -1901,7 +2179,10 @@ export class ServerDatabase {
     return conn;
   }
 
-  public removeConnection(connectionId: string, userId: string): boolean {
+  public async removeConnection(connectionId: string, userId: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.removeConnection(connectionId, userId);
+    }
     const idx = this.state.connections.findIndex((c) => c.id === connectionId);
     if (idx === -1) return false;
     const conn = this.state.connections[idx];
@@ -1923,7 +2204,10 @@ export class ServerDatabase {
   }
 
   // --- Follows ---
-  public followUser(followerId: string, followingId: string): boolean {
+  public async followUser(followerId: string, followingId: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.followUser(followerId, followingId);
+    }
     if (followerId === followingId) return false;
     if (!this.state.follows) this.state.follows = [];
     const exists = this.state.follows.some(
@@ -1937,8 +2221,8 @@ export class ServerDatabase {
       created_at: new Date().toISOString(),
     });
 
-    const follower = this.getProfileById(followerId);
-    this.createNotification({
+    const follower = this.enrichProfile(this.state.profiles.find((p) => p.id === followerId) || this.state.profiles[0]);
+    await this.createNotification({
       user_id: followingId,
       actor_id: followerId,
       type: 'follow',
@@ -1949,7 +2233,10 @@ export class ServerDatabase {
     return true;
   }
 
-  public unfollowUser(followerId: string, followingId: string): boolean {
+  public async unfollowUser(followerId: string, followingId: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.unfollowUser(followerId, followingId);
+    }
     if (!this.state.follows) return true;
     this.state.follows = this.state.follows.filter(
       (f) => !(f.follower_id === followerId && f.following_id === followingId)
@@ -1958,14 +2245,25 @@ export class ServerDatabase {
     return true;
   }
 
-  public isFollowing(followerId?: string, followingId?: string): boolean {
+  private isLocalFollowing(followerId?: string, followingId?: string): boolean {
     if (!followerId || !followingId || !this.state.follows) return false;
     return this.state.follows.some(
       (f) => f.follower_id === followerId && f.following_id === followingId
     );
   }
 
-  public getFollowStats(userId: string): { followersCount: number; followingCount: number } {
+  public async isFollowing(followerId?: string, followingId?: string): Promise<boolean> {
+    if (isSupabaseConfigured && followerId && followingId) {
+      return supabaseDb.isFollowing(followerId, followingId);
+    }
+    return this.isLocalFollowing(followerId, followingId);
+  }
+
+  public async getFollowStats(userId: string): Promise<{ followersCount: number; followingCount: number }> {
+    if (isSupabaseConfigured) {
+      const stats = await supabaseDb.getFollowStats(userId);
+      return { followersCount: stats.followers_count, followingCount: stats.following_count };
+    }
     if (!this.state.follows) return { followersCount: 0, followingCount: 0 };
     const followersCount = this.state.follows.filter((f) => f.following_id === userId).length;
     const followingCount = this.state.follows.filter((f) => f.follower_id === userId).length;
@@ -1973,18 +2271,25 @@ export class ServerDatabase {
   }
 
   // --- Bookmarks ---
-  public getBookmarks(userId: string): Bookmark[] {
+  public async getBookmarks(userId: string): Promise<Bookmark[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getBookmarks(userId);
+    }
     return this.state.bookmarks.filter((b) => b.user_id === userId);
   }
 
-  public toggleBookmark(payload: {
+  public async toggleBookmark(payload: {
     user_id: string;
     item_type: 'post' | 'case_study' | 'news' | 'journal';
     item_id: string;
     item_title?: string;
     item_summary?: string;
     item_url?: string;
-  }): { is_bookmarked: boolean } {
+  }): Promise<{ is_bookmarked: boolean }> {
+    if (isSupabaseConfigured) {
+      const res = await supabaseDb.toggleBookmark(payload);
+      return { is_bookmarked: res.bookmarked };
+    }
     const idx = this.state.bookmarks.findIndex(
       (b) => b.user_id === payload.user_id && b.item_type === payload.item_type && b.item_id === payload.item_id
     );
@@ -2011,19 +2316,25 @@ export class ServerDatabase {
   }
 
   // --- AI Sessions ---
-  public getAISessions(userId: string): AISession[] {
+  public async getAISessions(userId: string): Promise<AISession[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getAISessions(userId);
+    }
     return this.state.ai_sessions
       .filter((s) => s.user_id === userId)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public saveAISession(session: {
+  public async saveAISession(session: {
     user_id: string;
     title: string;
     source_text: string;
     source_url?: string;
     structured_summary: AISession['structured_summary'];
-  }): AISession {
+  }): Promise<AISession> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.saveAISession(session);
+    }
     const newSession: AISession = {
       id: `ai_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       user_id: session.user_id,
@@ -2039,7 +2350,10 @@ export class ServerDatabase {
   }
 
   // --- Admin Portal Metrics & Management ---
-  public getAdminMetrics() {
+  public async getAdminMetrics(): Promise<AdminMetrics> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getAdminMetrics();
+    }
     const totalUsers = this.state.profiles.length;
     const totalPosts = this.state.posts.length;
     const totalCaseStudies = this.state.case_studies.length;
@@ -2070,14 +2384,20 @@ export class ServerDatabase {
     };
   }
 
-  public getReports(): ContentReport[] {
+  public async getReports(): Promise<ContentReport[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getContentReports();
+    }
     return this.state.content_reports.map((r) => ({
       ...r,
-      reporter: this.getProfileById(r.reporter_id) || undefined,
+      reporter: this.enrichProfile(this.state.profiles.find((p) => p.id === r.reporter_id) || this.state.profiles[0]),
     }));
   }
 
-  public updateReportStatus(reportId: string, status: 'reviewed' | 'dismissed' | 'action_taken', adminId: string): ContentReport {
+  public async updateReportStatus(reportId: string, status: 'reviewed' | 'dismissed' | 'action_taken', adminId: string): Promise<ContentReport> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateContentReportStatus(reportId, status, adminId);
+    }
     const report = this.state.content_reports.find((r) => r.id === reportId);
     if (!report) throw new Error('Report not found');
     report.status = status;
@@ -2088,7 +2408,10 @@ export class ServerDatabase {
   }
 
   // --- Jobs Management ---
-  public getJobs(options?: { specialty_id?: string; is_active?: boolean; search?: string }): JobListing[] {
+  public async getJobs(options?: { specialty_id?: string; is_active?: boolean; search?: string }): Promise<JobListing[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getJobs(options);
+    }
     let list = this.state.jobs || [];
     if (options?.is_active !== undefined) {
       list = list.filter((j) => j.is_active === options.is_active);
@@ -2108,11 +2431,17 @@ export class ServerDatabase {
     return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getJobById(id: string): JobListing | null {
+  public async getJobById(id: string): Promise<JobListing | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getJobById(id);
+    }
     return (this.state.jobs || []).find((j) => j.id === id) || null;
   }
 
-  public createJob(payload: Partial<JobListing>): JobListing {
+  public async createJob(payload: Partial<JobListing>): Promise<JobListing> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createJob(payload);
+    }
     const newJob: JobListing = {
       id: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: payload.title || 'Untitled Opportunity',
@@ -2136,7 +2465,10 @@ export class ServerDatabase {
     return newJob;
   }
 
-  public updateJob(id: string, payload: Partial<JobListing>): JobListing {
+  public async updateJob(id: string, payload: Partial<JobListing>): Promise<JobListing> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateJob(id, payload);
+    }
     const job = (this.state.jobs || []).find((j) => j.id === id);
     if (!job) throw new Error('Job listing not found');
     Object.assign(job, payload, { updated_at: new Date().toISOString() });
@@ -2144,7 +2476,10 @@ export class ServerDatabase {
     return job;
   }
 
-  public deleteJob(id: string): boolean {
+  public async deleteJob(id: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.deleteJob(id);
+    }
     const beforeLen = (this.state.jobs || []).length;
     this.state.jobs = (this.state.jobs || []).filter((j) => j.id !== id);
     if (this.state.jobs.length !== beforeLen) {
@@ -2155,7 +2490,10 @@ export class ServerDatabase {
   }
 
   // --- Advertisements Management ---
-  public getAdvertisements(options?: { specialty_id?: string; is_active?: boolean; search?: string }): Advertisement[] {
+  public async getAdvertisements(options?: { specialty_id?: string; is_active?: boolean; search?: string }): Promise<Advertisement[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getAdvertisements(options);
+    }
     let list = this.state.advertisements || [];
     if (options?.is_active !== undefined) {
       list = list.filter((a) => a.is_active === options.is_active);
@@ -2175,11 +2513,17 @@ export class ServerDatabase {
     return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  public getAdvertisementById(id: string): Advertisement | null {
+  public async getAdvertisementById(id: string): Promise<Advertisement | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getAdvertisementById(id);
+    }
     return (this.state.advertisements || []).find((a) => a.id === id) || null;
   }
 
-  public createAdvertisement(payload: Partial<Advertisement>): Advertisement {
+  public async createAdvertisement(payload: Partial<Advertisement>): Promise<Advertisement> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createAdvertisement(payload);
+    }
     const newAd: Advertisement = {
       id: `ad_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: payload.title || 'Featured Educational Program',
@@ -2202,7 +2546,10 @@ export class ServerDatabase {
     return newAd;
   }
 
-  public updateAdvertisement(id: string, payload: Partial<Advertisement>): Advertisement {
+  public async updateAdvertisement(id: string, payload: Partial<Advertisement>): Promise<Advertisement> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.updateAdvertisement(id, payload);
+    }
     const ad = (this.state.advertisements || []).find((a) => a.id === id);
     if (!ad) throw new Error('Advertisement not found');
     Object.assign(ad, payload, { updated_at: new Date().toISOString() });
@@ -2210,7 +2557,10 @@ export class ServerDatabase {
     return ad;
   }
 
-  public deleteAdvertisement(id: string): boolean {
+  public async deleteAdvertisement(id: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.deleteAdvertisement(id);
+    }
     const beforeLen = (this.state.advertisements || []).length;
     this.state.advertisements = (this.state.advertisements || []).filter((a) => a.id !== id);
     if (this.state.advertisements.length !== beforeLen) {
@@ -2221,14 +2571,17 @@ export class ServerDatabase {
   }
 
   // --- Notifications Management ---
-  public createNotification(payload: {
+  public async createNotification(payload: {
     user_id: string;
     actor_id: string;
     type: Notification['type'];
     item_id?: string;
     item_title?: string;
     message: string;
-  }): Notification | null {
+  }): Promise<Notification | null> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createNotification(payload);
+    }
     if (payload.user_id === payload.actor_id) return null;
     if (!this.state.notifications) this.state.notifications = [];
 
@@ -2249,12 +2602,15 @@ export class ServerDatabase {
     return newNotif;
   }
 
-  public getNotifications(userId: string): { notifications: Notification[]; unread_count: number } {
+  public async getNotifications(userId: string): Promise<{ notifications: Notification[]; unread_count: number }> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getNotifications(userId);
+    }
     const list = (this.state.notifications || [])
       .filter((n) => n.user_id === userId)
       .map((n) => ({
         ...n,
-        actor: this.getProfileById(n.actor_id) || undefined,
+        actor: this.enrichProfile(this.state.profiles.find((p) => p.id === n.actor_id) || this.state.profiles[0]),
       }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -2262,7 +2618,10 @@ export class ServerDatabase {
     return { notifications: list, unread_count };
   }
 
-  public markNotificationRead(notificationId: string, userId: string): boolean {
+  public async markNotificationRead(notificationId: string, userId: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.markNotificationRead(notificationId, userId);
+    }
     const notif = (this.state.notifications || []).find((n) => n.id === notificationId && n.user_id === userId);
     if (!notif) return false;
     notif.is_read = true;
@@ -2270,7 +2629,10 @@ export class ServerDatabase {
     return true;
   }
 
-  public markAllNotificationsRead(userId: string): boolean {
+  public async markAllNotificationsRead(userId: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.markAllNotificationsRead(userId);
+    }
     let updated = false;
     for (const n of this.state.notifications || []) {
       if (n.user_id === userId && !n.is_read) {

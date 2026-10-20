@@ -689,6 +689,181 @@ async function runTests() {
     assert(logoutRes.ok, 'Logout API returns 200 OK');
     assert(logoutRes.data.success === true, 'Logout API reports success: true');
 
+    // 23. Testing Case Study Author Attribution, Personalised Feed, and New User Feed Isolation
+    console.log('\n--- 23. Testing Case Study Author, Personalised Feed & Feed Isolation ---');
+    // Step A: Register Dr. Alice (Cardiologist)
+    const aliceSignup = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Alice Cardiologist',
+        email: `alice.cardio.${Date.now()}@clinic.org`,
+        role: 'healthcare_professional',
+        title: 'Attending Cardiologist',
+        institution: 'Heart & Vascular Institute',
+        location: 'Boston, MA',
+        specialty_ids: ['cardiology'],
+        years_of_experience: 10,
+      }),
+    });
+    assert(aliceSignup.status === 201, 'Registered Dr. Alice (Cardiologist)');
+    const aliceUser = aliceSignup.data.user;
+
+    // Step B: Register Dr. Bob (Neurologist)
+    const bobSignup = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Bob Neurologist',
+        email: `bob.neuro.${Date.now()}@clinic.org`,
+        role: 'healthcare_professional',
+        title: 'Attending Neurologist',
+        institution: 'Brain Health Center',
+        location: 'Chicago, IL',
+        specialty_ids: ['neurology'],
+        years_of_experience: 8,
+      }),
+    });
+    assert(bobSignup.status === 201, 'Registered Dr. Bob (Neurologist)');
+    const bobUser = bobSignup.data.user;
+
+    // Step C: Register Dr. Charlie (Cardiologist)
+    const charlieSignup = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Charlie Cardiologist',
+        email: `charlie.cardio.${Date.now()}@clinic.org`,
+        role: 'healthcare_professional',
+        title: 'Cardiology Fellow',
+        institution: 'Academic Medical Center',
+        location: 'New York, NY',
+        specialty_ids: ['cardiology'],
+        years_of_experience: 3,
+      }),
+    });
+    assert(charlieSignup.status === 201, 'Registered Dr. Charlie (Cardiologist)');
+    const charlieUser = charlieSignup.data.user;
+
+    // Step D: Verify Alice creates a case study & author details match Alice perfectly
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: aliceUser.id }),
+    });
+
+    const aliceCaseRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Acute Aortic Dissection Type A in a Normotensive Triathlete',
+        short_summary: 'Unusual presentation of acute Stanford Type A dissection following intense endurance exertion.',
+        educational_content: 'Clinical Presentation: 38-year-old male presents with sharp interscapular pain after a marathon.',
+        learning_objectives: ['Recognize atypical aortic dissection', 'Evaluate urgent TTE/CT findings'],
+        specialty_ids: ['cardiology'],
+        status: 'published',
+      }),
+    });
+    assert(aliceCaseRes.status === 201, 'Alice created Cardiology Case Study (201 Created)');
+    const aliceCase = aliceCaseRes.data.caseStudy;
+    assert(aliceCase.author_id === aliceUser.id, 'Case study author_id matches Alice exactly');
+    assert(aliceCase.author_name === 'Dr. Alice Cardiologist', 'Case study author_name is Dr. Alice Cardiologist');
+    assert(Boolean(aliceCase.author_avatar_url), 'Case study author_avatar_url is populated with Alice avatar');
+
+    // Fetch single case study via GET /api/case-studies/[id]
+    const singleCaseRes = await request(`/api/case-studies/${aliceCase.id}`);
+    assert(singleCaseRes.ok, 'Fetched single case study by ID');
+    assert(singleCaseRes.data.caseStudy.author_name === 'Dr. Alice Cardiologist', 'Single case view preserves correct author name');
+    assert(Boolean(singleCaseRes.data.caseStudy.author_avatar_url), 'Single case view preserves author avatar');
+
+    // Step E: Personalised Case Study Feed verification
+    // Switch to Dr. Bob (Neurologist, not connected to Alice yet)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: bobUser.id }),
+    });
+
+    const bobPersonalizedBefore = await request('/api/case-studies?personalized=true');
+    assert(bobPersonalizedBefore.ok, 'Bob fetched personalized case study feed');
+    const bobHasAliceCaseBefore = bobPersonalizedBefore.data.caseStudies.some((c) => c.id === aliceCase.id);
+    assert(!bobHasAliceCaseBefore, 'Alice cardiology case does NOT appear in Bob personalized feed (different specialty & not connected)');
+
+    // Switch to Dr. Charlie (Cardiologist, not connected to Alice, but shares cardiology specialty)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: charlieUser.id }),
+    });
+    const charliePersonalized = await request('/api/case-studies?personalized=true');
+    const charlieHasAliceCase = charliePersonalized.data.caseStudies.some((c) => c.id === aliceCase.id);
+    assert(charlieHasAliceCase, 'Alice case DOES appear in Charlie personalized feed based on relevant clinical specialisation');
+
+    // Connect Bob and Alice
+    // Bob sends connection request to Alice
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: bobUser.id }),
+    });
+    const connectReq = await request('/api/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientId: aliceUser.id, recipient_id: aliceUser.id }),
+    });
+    assert(connectReq.status === 201, 'Bob sent connection request to Alice');
+    const connId = connectReq.data.connection.id;
+
+    // Alice accepts connection request
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: aliceUser.id }),
+    });
+    const acceptRes = await request(`/api/connections/${connId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted' }),
+    });
+    assert(acceptRes.ok, 'Alice accepted connection request from Bob');
+
+    // Switch back to Bob: now Bob is connected to Alice, so Alice case should appear in Bob personalized feed
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: bobUser.id }),
+    });
+    const bobPersonalizedAfter = await request('/api/case-studies?personalized=true');
+    const bobHasAliceCaseAfter = bobPersonalizedAfter.data.caseStudies.some((c) => c.id === aliceCase.id);
+    assert(bobHasAliceCaseAfter, 'Alice case DOES appear in Bob personalized feed after establishing peer connection');
+
+    // Step F: Verify Newly Registered User Feed Isolation (No Default/Sample Posts)
+    const bobFeedRes = await request('/api/posts');
+    assert(bobFeedRes.ok, 'Fetched feed for newly registered user');
+    const samplePostsInBobFeed = bobFeedRes.data.posts.filter((p) => p.id.startsWith('30000000-') || (p.author_id && p.author_id.startsWith('00000000-')));
+    assert(samplePostsInBobFeed.length === 0, 'Newly registered user feed contains ZERO sample/hardcoded posts');
+
+    // Bob publishes a real post
+    const bobPostRes = await request('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: 'Clinical Note: Acetylcholine receptor antibody titers in ocular myasthenia gravis.',
+        specialty_id: 'neurology',
+      }),
+    });
+    assert(bobPostRes.status === 201, 'Bob published a real clinical post');
+
+    const bobFeedAfterPost = await request('/api/posts');
+    assert(
+      bobFeedAfterPost.data.posts.some((p) => p.id === bobPostRes.data.post.id) &&
+      bobFeedAfterPost.data.posts.every((p) => !p.id.startsWith('30000000-') && !p.author_id.startsWith('00000000-')),
+      'Newly registered user feed displays only their real post with no sample posts'
+    );
+
+    // Clean up test post
+    await request(`/api/posts/${bobPostRes.data.post.id}`, { method: 'DELETE' });
+
     // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',

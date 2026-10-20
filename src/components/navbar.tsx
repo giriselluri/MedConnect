@@ -361,22 +361,26 @@ export function Navbar() {
                               <span>Switch Healthcare Persona</span>
                             </button>
                           )}
-                          <Link
-                            href="/login"
-                            onClick={() => setIsProfileMenuOpen(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
-                          >
-                            <LogIn className="w-4 h-4 text-teal-600" />
-                            <span>Sign In with Credentials</span>
-                          </Link>
-                          <Link
-                            href="/signup"
-                            onClick={() => setIsProfileMenuOpen(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
-                          >
-                            <UserPlus className="w-4 h-4 text-teal-600" />
-                            <span>Create Clinical Account</span>
-                          </Link>
+                          {isDemoUser && (
+                            <>
+                              <Link
+                                href="/login"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                                className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+                              >
+                                <LogIn className="w-4 h-4 text-teal-600" />
+                                <span>Sign In with Credentials</span>
+                              </Link>
+                              <Link
+                                href="/signup"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                                className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+                              >
+                                <UserPlus className="w-4 h-4 text-teal-600" />
+                                <span>Create Clinical Account</span>
+                              </Link>
+                            </>
+                          )}
                         </div>
 
                         <div className="border-t border-slate-100 pt-1">

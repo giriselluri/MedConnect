@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     const is_active = is_active_param !== null ? is_active_param === 'true' : undefined;
 
-    const jobs = serverDb.getJobs({ specialty_id, is_active, search });
+    const jobs = await serverDb.getJobs({ specialty_id, is_active, search });
     return NextResponse.json({ jobs });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch jobs' }, { status: 500 });
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Job description is required' }, { status: 400 });
     }
 
-    const job = serverDb.createJob(body);
+    const job = await serverDb.createJob(body);
     return NextResponse.json({ job, message: 'Job listing created successfully' }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to create job listing' }, { status: 500 });

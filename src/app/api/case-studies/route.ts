@@ -7,8 +7,9 @@ export async function GET(req: NextRequest) {
     const specialtyParam = searchParams.get('specialty');
     const search = searchParams.get('search') || undefined;
     const includeDrafts = searchParams.get('includeDrafts') === 'true';
+    const personalized = searchParams.get('personalized') === 'true';
 
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     const specialtyIds = specialtyParam
@@ -16,12 +17,13 @@ export async function GET(req: NextRequest) {
       : undefined;
 
     // Public users see ONLY published case studies
-    const caseStudies = serverDb.getCaseStudies({
+    const caseStudies = await serverDb.getCaseStudies({
       specialtyIds,
       search,
       includeDraftsAndArchived: includeDrafts && isAdmin,
       currentUserId: currentUser.id,
       isAdmin,
+      personalized,
     });
 
     return NextResponse.json({ caseStudies });
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     if (!currentUser) {
       return NextResponse.json(
         { error: 'Unauthorized: Please sign in to create a case study' },
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const caseStudy = serverDb.createCaseStudy(
+    const caseStudy = await serverDb.createCaseStudy(
       {
         title: body.title.trim(),
         short_summary: body.short_summary.trim(),

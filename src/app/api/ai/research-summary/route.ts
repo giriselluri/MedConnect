@@ -28,8 +28,8 @@ function checkRateLimit(key: string): { allowed: boolean; remaining: number; res
 
 export async function GET() {
   try {
-    const currentUser = serverDb.getCurrentUser();
-    const sessions = serverDb.getAISessions(currentUser.id);
+    const currentUser = await serverDb.getCurrentUser();
+    const sessions = await serverDb.getAISessions(currentUser.id);
     return NextResponse.json({ sessions });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch AI sessions' }, { status: 500 });
@@ -38,7 +38,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
 
     // Client identifier for rate limiting: IP address or User ID
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || currentUser.id;
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     const structuredSummary = await generateResearchSummary(text, title);
 
-    const session = serverDb.saveAISession({
+    const session = await serverDb.saveAISession({
       user_id: currentUser.id,
       title: title || 'Research Synthesis Session',
       source_text: text,

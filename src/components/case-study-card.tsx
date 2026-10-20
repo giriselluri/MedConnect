@@ -128,15 +128,40 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
 
       {/* Footer / Author info */}
       <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between gap-3 text-xs">
-        <div className="min-w-0">
-          <p className="font-semibold text-slate-900 truncate">{caseStudy.author_name}</p>
-          <div className="flex items-center gap-2 text-[11px] text-slate-500">
-            <span>{caseStudy.author_title || 'Clinical Faculty'}</span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-slate-400" />
-              {formattedDate}
-            </span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Link
+            href={caseStudy.author_id ? `/profile/${caseStudy.author_id}` : '#'}
+            className="flex-shrink-0 group/avatar"
+            title={caseStudy.author_name}
+          >
+            <img
+              src={
+                caseStudy.author_avatar_url ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(caseStudy.author_name || 'Clinician')}&background=0d9488&color=fff&bold=true`
+              }
+              alt={caseStudy.author_name}
+              className="w-8 h-8 rounded-full object-cover border border-slate-200 group-hover/avatar:ring-2 group-hover/avatar:ring-teal-500 transition"
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(caseStudy.author_name || 'Clinician')}&background=0d9488&color=fff&bold=true`;
+              }}
+            />
+          </Link>
+          <div className="min-w-0">
+            <Link
+              href={caseStudy.author_id ? `/profile/${caseStudy.author_id}` : '#'}
+              className="font-semibold text-slate-900 hover:text-teal-700 truncate block transition"
+            >
+              {caseStudy.author_name}
+            </Link>
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 truncate">
+              <span className="truncate">{caseStudy.author_title || 'Clinical Faculty'}</span>
+              <span>•</span>
+              <span className="flex items-center gap-1 flex-shrink-0">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                {formattedDate}
+              </span>
+            </div>
           </div>
         </div>
 

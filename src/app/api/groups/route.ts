@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const currentUser = serverDb.getCurrentUser();
-    const groups = serverDb.getGroups(currentUser.id);
+    const currentUser = await serverDb.getCurrentUser();
+    const groups = await serverDb.getGroups(currentUser.id);
     return NextResponse.json({ groups });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch groups' }, { status: 500 });
@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const body = await req.json();
 
     if (!body.name || body.name.trim().length === 0) {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Community description is required' }, { status: 400 });
     }
 
-    const newGroup = serverDb.createGroup(
+    const newGroup = await serverDb.createGroup(
       {
         name: body.name.trim(),
         description: body.description.trim(),

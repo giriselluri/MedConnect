@@ -16,6 +16,8 @@ import {
   Loader2,
   AlertCircle,
   PlusCircle,
+  Sparkles,
+  Globe,
 } from 'lucide-react';
 
 export default function CaseStudiesPage() {
@@ -24,6 +26,7 @@ export default function CaseStudiesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
+  const [feedMode, setFeedMode] = useState<'personalized' | 'all'>('personalized');
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
@@ -33,6 +36,9 @@ export default function CaseStudiesPage() {
     setError(null);
     try {
       const params = new URLSearchParams();
+      if (feedMode === 'personalized') {
+        params.set('personalized', 'true');
+      }
       if (selectedSpecialties.length > 0) {
         params.set('specialty', selectedSpecialties.join(','));
       }
@@ -54,7 +60,7 @@ export default function CaseStudiesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSpecialties, searchQuery]);
+  }, [selectedSpecialties, searchQuery, feedMode]);
 
   useEffect(() => {
     fetchCaseStudies();
@@ -116,6 +122,32 @@ export default function CaseStudiesPage() {
 
       {/* Search and Filters Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+        {/* Personalized Feed vs All Case Studies Toggle */}
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <button
+            onClick={() => setFeedMode('personalized')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+              feedMode === 'personalized'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>For You (My Specialty & Connections)</span>
+          </button>
+          <button
+            onClick={() => setFeedMode('all')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+              feedMode === 'all'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>All Case Studies</span>
+          </button>
+        </div>
+
         {/* Search input */}
         <div className="relative">
           <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -193,25 +225,40 @@ export default function CaseStudiesPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
           <BookOpen className="w-10 h-10 text-slate-400 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">
-            No Published Case Studies Match Your Filters
+            {feedMode === 'personalized'
+              ? 'No Case Studies in Your Personalized Feed Yet'
+              : 'No Published Case Studies Match Your Filters'}
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            There are currently no published educational cases matching{' '}
-            {selectedSpecialties.length > 0 ? (
-              <span className="font-semibold text-slate-700">
-                "{selectedSpecialties.join(', ')}"
-              </span>
-            ) : (
-              'your search criteria'
-            )}
-            . Note that internal drafts and archived cases remain private to administrators.
+            {feedMode === 'personalized'
+              ? 'We curate this feed based on your clinical specialisation, established connections, and shared cases. Explore all case studies or create your own.'
+              : selectedSpecialties.length > 0
+              ? `There are currently no published educational cases matching "${selectedSpecialties.join(', ')}".`
+              : 'There are currently no published educational cases matching your search criteria.'}
           </p>
-          <button
-            onClick={clearFilters}
-            className="mt-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-          >
-            Reset Filters
-          </button>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            {feedMode === 'personalized' ? (
+              <button
+                onClick={() => setFeedMode('all')}
+                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                Browse All Case Studies
+              </button>
+            ) : (
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                Reset Filters
+              </button>
+            )}
+            <Link
+              href="/case-studies/new"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition"
+            >
+              Publish Case Study
+            </Link>
+          </div>
         </div>
       ) : (
         <div>

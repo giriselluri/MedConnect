@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     ];
     const assignedRole: Role = validRoles.includes(role) ? role : 'healthcare_professional';
 
-    const newUser = serverDb.registerUser({
+    const newUser = await serverDb.registerUser({
       full_name: full_name.trim(),
       email: email.trim(),
       role: assignedRole,
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       qualifications: Array.isArray(qualifications) && qualifications.length > 0 ? qualifications : undefined,
     });
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         message: 'Clinical profile registered and verified successfully',
@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
+
+    response.cookies.set('medconnect_session_user_id', newUser.id, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return response;
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Failed to register clinical profile' },

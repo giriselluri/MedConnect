@@ -3,14 +3,14 @@ import { serverDb } from '@/lib/server-db';
 
 export async function GET() {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    const reports = serverDb.getReports();
+    const reports = await serverDb.getReports();
     return NextResponse.json({ reports });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch content reports' }, { status: 500 });
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     if (!isAdmin) {
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid report status' }, { status: 400 });
     }
 
-    const updated = serverDb.updateReportStatus(reportId, status, currentUser.id);
+    const updated = await serverDb.updateReportStatus(reportId, status, currentUser.id);
     return NextResponse.json({ report: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to update report status' }, { status: 500 });

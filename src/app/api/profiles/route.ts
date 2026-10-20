@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const specialty = searchParams.get('specialty') || undefined;
     const search = searchParams.get('search') || undefined;
 
-    const profiles = serverDb.getProfiles({ role, specialty, search });
+    const profiles = await serverDb.getProfiles({ role, specialty, search });
     return NextResponse.json({ profiles });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch profiles' }, { status: 500 });

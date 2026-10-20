@@ -10,8 +10,8 @@ export const supabase = supabaseUrl && supabaseAnonKey
   : null;
 
 // Server-only privileged Supabase instance
-export const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
-  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+export const supabaseAdmin = supabaseUrl && (supabaseServiceRoleKey || supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -19,4 +19,6 @@ export const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
     })
   : null;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && (supabaseServiceRoleKey || supabaseAnonKey)
+);

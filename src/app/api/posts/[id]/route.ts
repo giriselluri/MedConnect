@@ -3,8 +3,8 @@ import { serverDb } from '@/lib/server-db';
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
-    const success = serverDb.deletePost(params.id, currentUser.id, currentUser.is_admin);
+    const currentUser = await serverDb.getCurrentUser();
+    const success = await serverDb.deletePost(params.id, currentUser.id, currentUser.is_admin);
     if (!success) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }

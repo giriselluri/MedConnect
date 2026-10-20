@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = serverDb.loginUser(target);
+    const user = await serverDb.loginUser(target);
 
     if (!user) {
       return NextResponse.json(
@@ -27,11 +27,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: `Signed in as ${user.full_name}`,
       user,
     });
+
+    response.cookies.set('medconnect_session_user_id', user.id, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    return response;
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Login failed' },

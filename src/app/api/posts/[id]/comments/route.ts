@@ -3,14 +3,14 @@ import { serverDb } from '@/lib/server-db';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const { content } = await req.json();
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json({ error: 'Comment content cannot be empty' }, { status: 400 });
     }
 
-    const comment = serverDb.addComment(params.id, currentUser.id, content.trim());
+    const comment = await serverDb.addComment(params.id, currentUser.id, content.trim());
     return NextResponse.json({ comment }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to add comment' }, { status: 500 });
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const { comment_id, content } = await req.json();
 
     if (!comment_id) {
@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'Comment content cannot be empty' }, { status: 400 });
     }
 
-    const updated = serverDb.updateComment(comment_id, content.trim(), currentUser.id, !!currentUser.is_admin);
+    const updated = await serverDb.updateComment(comment_id, content.trim(), currentUser.id, !!currentUser.is_admin);
     return NextResponse.json({ comment: updated });
   } catch (error: any) {
     const status = error.message.includes('Unauthorized') ? 403 : 500;
@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const { searchParams } = new URL(req.url);
     let comment_id = searchParams.get('comment_id');
 
@@ -56,7 +56,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });
     }
 
-    const success = serverDb.deleteComment(comment_id, currentUser.id, !!currentUser.is_admin);
+    const success = await serverDb.deleteComment(comment_id, currentUser.id, !!currentUser.is_admin);
     if (!success) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
     }

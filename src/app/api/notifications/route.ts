@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const currentUser = serverDb.getCurrentUser();
-    const result = serverDb.getNotifications(currentUser.id);
+    const currentUser = await serverDb.getCurrentUser();
+    const result = await serverDb.getNotifications(currentUser.id);
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch notifications' }, { status: 500 });
@@ -15,16 +15,16 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const body = await req.json();
 
     if (body.mark_all) {
-      serverDb.markAllNotificationsRead(currentUser.id);
+      await serverDb.markAllNotificationsRead(currentUser.id);
       return NextResponse.json({ success: true, unread_count: 0, message: 'All notifications marked as read' });
     }
 
     if (body.id) {
-      const success = serverDb.markNotificationRead(body.id, currentUser.id);
+      const success = await serverDb.markNotificationRead(body.id, currentUser.id);
       return NextResponse.json({ success });
     }
 

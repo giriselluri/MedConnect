@@ -4,7 +4,7 @@ import { UserRole } from '@/types';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const currentUser = serverDb.getCurrentUser();
+    const currentUser = await serverDb.getCurrentUser();
     const isAdmin = Boolean(currentUser.is_admin || currentUser.role === 'admin');
 
     if (!isAdmin) {
@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const is_admin = role === 'admin';
-    const updated = serverDb.updateProfile(params.id, { role, is_admin });
+    const updated = await serverDb.updateProfile(params.id, { role, is_admin });
 
     return NextResponse.json({ user: updated });
   } catch (error: any) {

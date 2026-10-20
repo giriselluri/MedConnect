@@ -618,3 +618,92 @@ INSERT INTO public.group_members (group_id, user_id, role, joined_at) VALUES
 ('10000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000009', 'admin', NOW()),
 ('10000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000001', 'member', NOW())
 ON CONFLICT DO NOTHING;
+
+-- ------------------------------------------------------------------------------
+-- 11. Seed Job Opportunities
+-- ------------------------------------------------------------------------------
+INSERT INTO public.jobs (
+    id, title, organization, location, specialty_id, employment_type,
+    description, requirements, apply_url, is_active, is_sample, created_at
+) VALUES
+(
+    'job-001',
+    'Attending Interventional Cardiologist',
+    'Massachusetts Academic Heart Center',
+    'Boston, MA (On-site)',
+    'cardiology',
+    'Full-time',
+    'Lead cardiac catheterization interventions, complex PCI protocols, and participate in multi-center clinical trials within our cardiovascular research institute.',
+    ARRAY['Board certified/eligible in Interventional Cardiology', 'Active Massachusetts medical license or eligibility', 'Proficiency in intravascular ultrasound (IVUS) and mechanical circulatory support', 'Demonstrated commitment to clinical trial investigation'],
+    'https://example.com/careers/cardiology-001',
+    TRUE,
+    TRUE,
+    NOW() - INTERVAL '3 days'
+),
+(
+    'job-002',
+    'Pediatric Critical Care Fellow / Junior Attending',
+    'National Children''s Medical Center',
+    'Washington, DC',
+    'pediatrics',
+    'Fellowship',
+    'High-acuity pediatric intensive care training program emphasizing pediatric extracorporeal membrane oxygenation (ECMO) and acute resuscitation research.',
+    ARRAY['Completion of ACGME-accredited Pediatric Residency', 'Active PALS and BLS certifications', 'Eligible for District of Columbia medical licensure'],
+    'https://example.com/careers/pediatrics-002',
+    TRUE,
+    TRUE,
+    NOW() - INTERVAL '5 days'
+),
+(
+    'job-003',
+    'Associate Director of Clinical Oncology Trials',
+    'Metropolitan Cancer Research Institute',
+    'New York, NY',
+    'oncology',
+    'Full-time',
+    'Direct early-phase targeted oncology therapies and immunotherapy checkpoint resistance studies with 50% protected research time.',
+    ARRAY['MD or MD/PhD with Fellowship in Hematology/Oncology', 'Minimum 4 years experience leading Phase I/II clinical trials', 'Track record of peer-reviewed clinical research publications'],
+    'https://example.com/careers/oncology-003',
+    TRUE,
+    TRUE,
+    NOW() - INTERVAL '7 days'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ------------------------------------------------------------------------------
+-- 12. Seed Advertisements & Clinical Notices
+-- ------------------------------------------------------------------------------
+INSERT INTO public.advertisements (
+    id, title, sponsor_name, headline, content, target_url, cta_label,
+    specialty_id, badge_label, is_active, is_sample, created_at
+) VALUES
+(
+    'ad-001',
+    'CardioVascular Horizons 2026 Annual Symposium',
+    'American Academy of Cardiology Education',
+    'Advance Your Interventional & Imaging Clinical Skills',
+    'Join 1,200+ cardiology peers for 3 days of live case transmissions, high-definition IVUS workshops, and 24 AMA PRA Category 1 CME Credits in Boston.',
+    'https://example.com/cardio-horizons-2026',
+    'Register for CME (Demo)',
+    'cardiology',
+    'Sponsored Clinical Notice',
+    TRUE,
+    TRUE,
+    NOW() - INTERVAL '2 days'
+),
+(
+    'ad-002',
+    'DeepHistology Diagnostic AI Platform',
+    'DeepHistology Clinical Systems',
+    'Sub-cellular Tumor Margin Identification with 99.4% Concordance',
+    'Streamline frozen section turnaround times and enhance pathology triage with real-time deep learning histology workflows. Request a clinical demonstration.',
+    'https://example.com/deephistology-demo',
+    'Request Clinical Demo (Demo)',
+    'oncology',
+    'Sponsored Clinical Notice',
+    TRUE,
+    TRUE,
+    NOW() - INTERVAL '4 days'
+)
+ON CONFLICT (id) DO NOTHING;
+
