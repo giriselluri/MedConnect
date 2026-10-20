@@ -32,12 +32,12 @@ interface Metrics {
 }
 
 export default function AdminDashboardPage() {
-  const { currentUser, switchUser } = useApp();
+  const { currentUser, isDemoUser, switchUser } = useApp();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
+  const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
 
   useEffect(() => {
     async function loadMetrics() {
@@ -76,18 +76,29 @@ export default function AdminDashboardPage() {
           You are currently signed in as <strong>{currentUser?.full_name}</strong> (Role: <span className="capitalize">{currentUser?.role?.replace('_', ' ')}</span>).
           Administrative management and case publishing privileges require server-verified Admin credentials.
         </p>
-        <div className="pt-2">
-          <button
-            onClick={async () => {
-              // Switch to Dr. Sarah Jenkins (Admin)
-              await switchUser('00000000-0000-0000-0000-000000000001');
-            }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Switch to Dr. Sarah Jenkins (Chief Admin)</span>
-          </button>
-        </div>
+        {isDemoUser ? (
+          <div className="pt-2">
+            <button
+              onClick={async () => {
+                // Switch to Dr. Sarah Jenkins (Admin)
+                await switchUser('00000000-0000-0000-0000-000000000001');
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Switch to Dr. Sarah Jenkins (Chief Admin)</span>
+            </button>
+          </div>
+        ) : (
+          <div className="pt-2">
+            <Link
+              href="/feed"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow transition"
+            >
+              <span>Return to Clinical Feed</span>
+            </Link>
+          </div>
+        )}
       </div>
     );
   }

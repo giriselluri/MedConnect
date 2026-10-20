@@ -6,7 +6,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const user = serverDb.getCurrentUser();
-    return NextResponse.json({ user, allProfiles: serverDb.getProfiles() });
+    const isDemo = Boolean(user?.is_demo !== false && user?.id?.startsWith('00000000-'));
+    // Demo testing users see all seeded profiles; newly registered users see only their own profile
+    const allProfiles = isDemo ? serverDb.getProfiles() : [user];
+    return NextResponse.json({ user, allProfiles, isDemo });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch session' }, { status: 500 });
   }

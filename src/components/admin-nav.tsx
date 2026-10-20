@@ -54,7 +54,7 @@ export function AdminNav() {
             </Link>
 
             <Link
-              href="/"
+              href="/feed"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg transition"
             >
               <ArrowLeft className="w-3.5 h-3.5" />

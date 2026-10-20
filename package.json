@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.45.6",
+    "@vercel/analytics": "^2.0.1",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "isomorphic-git": "^1.44.3",

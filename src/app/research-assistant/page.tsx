@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { AISession } from '@/types';
 import { StructuredResearchSummary } from '@/lib/gemini';
+import { trackAppEvent } from '@/lib/analytics';
 import {
   Sparkles,
   BookOpen,
@@ -30,7 +31,7 @@ Conclusions: In selected intermediate-risk bicuspid patients, modern-generation 
 function ResearchAssistantContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentUser } = useApp();
+  const { currentUser, isDemoUser } = useApp();
 
   const [title, setTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -98,6 +99,17 @@ function ResearchAssistantContent() {
       if (data.session) {
         setSavedSessions((prev) => [data.session, ...prev]);
       }
+
+      // Track AI Research Assistant usage event (strictly on success, excluding demo)
+      trackAppEvent(
+        'ai_research_assistant_used',
+        {
+          model_used: data.summary?.model_used || 'gemini-1.5-flash',
+          has_source_url: Boolean(sourceUrl.trim()),
+          findings_count: data.summary?.key_findings?.length || 0,
+        },
+        isDemoUser
+      );
     } catch (err: any) {
       setError(err.message || 'An error occurred during AI analysis.');
     } finally {
@@ -144,7 +156,7 @@ function ResearchAssistantContent() {
         })
       );
     }
-    router.push('/?compose=1');
+    router.push('/feed?compose=1');
   };
 
   const loadSample = () => {

@@ -35,6 +35,7 @@ export interface Profile {
   interests: string[];
   is_admin: boolean;
   is_verified?: boolean;
+  is_demo?: boolean;
   connections_count?: number;
   specialties?: Specialty[];
   created_at?: string;

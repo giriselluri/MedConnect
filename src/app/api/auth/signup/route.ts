@@ -28,7 +28,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Professional medical title is required' }, { status: 400 });
     }
 
-    const validRoles: Role[] = ['admin', 'healthcare_professional', 'medical_student', 'researcher'];
+    const validRoles: Role[] = [
+      'admin',
+      'healthcare_professional',
+      'medical_student',
+      'researcher',
+      'pharmaceutical_professional',
+      'other_healthcare_professional',
+    ];
     const assignedRole: Role = validRoles.includes(role) ? role : 'healthcare_professional';
 
     const newUser = serverDb.registerUser({

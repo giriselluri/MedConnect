@@ -11,9 +11,9 @@ interface UserSwitchModalProps {
 }
 
 export function UserSwitchModal({ isOpen, onClose }: UserSwitchModalProps) {
-  const { currentUser, allProfiles, switchUser } = useApp();
+  const { currentUser, allProfiles, switchUser, isDemoUser } = useApp();
 
-  if (!isOpen) return null;
+  if (!isOpen || !isDemoUser) return null;
 
   const getRoleIcon = (role: UserRole) => {
     switch (role) {
@@ -81,6 +81,10 @@ export function UserSwitchModal({ isOpen, onClose }: UserSwitchModalProps) {
               <div
                 key={profile.id}
                 onClick={async () => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('medconnect_logged_in', 'true');
+                    document.cookie = 'medconnect_logged_in=true; path=/; max-age=2592000';
+                  }
                   await switchUser(profile.id);
                   onClose();
                 }}

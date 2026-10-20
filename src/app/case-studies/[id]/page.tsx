@@ -31,7 +31,7 @@ import {
 
 export default function CaseStudyDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { toggleBookmark, currentUser } = useApp();
+  const { toggleBookmark, currentUser, isDemoUser } = useApp();
   const [caseStudy, setCaseStudy] = useState<CaseStudy | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockSuccess, setUnlockSuccess] = useState(false);
 
-  const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
+  const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
 
   useEffect(() => {
     async function loadCase() {
@@ -348,10 +348,12 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
                 </button>
               </div>
 
-              <div className="pt-2 text-[11px] text-slate-500 flex items-center justify-center gap-2">
-                <span>💡 Demo passcode:</span>
-                <code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-mono font-bold">clinical2024</code>
-              </div>
+              {isDemoUser && (
+                <div className="pt-2 text-[11px] text-slate-500 flex items-center justify-center gap-2">
+                  <span>💡 Demo passcode:</span>
+                  <code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-mono font-bold">clinical2024</code>
+                </div>
+              )}
 
               {isAdmin && (
                 <div className="pt-2 border-t border-slate-200">

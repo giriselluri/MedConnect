@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context';
 import { Profile, Connection } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { LeftSidebar } from '@/components/left-sidebar';
+import { trackAppEvent } from '@/lib/analytics';
 import {
   Users,
   Search,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function NetworkPage() {
-  const { currentUser, specialties } = useApp();
+  const { currentUser, specialties, isDemoUser } = useApp();
   const [activeTab, setActiveTab] = useState<'directory' | 'connections' | 'invitations'>('directory');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -73,6 +74,14 @@ export default function NetworkPage() {
       });
       if (res.ok) {
         await loadNetworkData();
+        const target = profiles.find((p) => p.id === recipientId);
+        trackAppEvent(
+          'connection_requested',
+          {
+            target_role: target?.role || 'healthcare_professional',
+          },
+          isDemoUser
+        );
       }
     } catch (e) {
       console.error(e);
@@ -363,7 +372,7 @@ export default function NetworkPage() {
                 <option value="researcher">Clinical Researchers</option>
                 <option value="medical_student">Medical Students</option>
                 <option value="pharmaceutical_professional">Pharmaceutical</option>
-                <option value="admin">Chief Medical Admins</option>
+                {isDemoUser && <option value="admin">Chief Medical Admins</option>}
               </select>
             </div>
 

@@ -24,9 +24,9 @@ import { SpecialtyBadge } from './specialty-badge';
 
 export function LeftSidebar() {
   const pathname = usePathname();
-  const { currentUser, specialties, activeSpecialty, setActiveSpecialty, bookmarks } = useApp();
+  const { currentUser, isDemoUser, specialties, activeSpecialty, setActiveSpecialty, bookmarks } = useApp();
 
-  const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
+  const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
 
   return (
     <aside className="space-y-4">
@@ -128,7 +128,7 @@ export function LeftSidebar() {
           Platform Navigation
         </div>
         {[
-          { href: '/', label: 'Home Feed', icon: Home },
+          { href: '/feed', label: 'Home Feed', icon: Home },
           { href: '/news', label: 'Medical News', icon: Newspaper },
           { href: '/case-studies', label: 'Case Studies', icon: BookOpen, badge: 'Clinical' },
           { href: '/journals', label: 'Medical Journals', icon: FileText },

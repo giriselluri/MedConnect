@@ -9,9 +9,12 @@ interface AppContextType {
   specialties: Specialty[];
   bookmarks: Bookmark[];
   isLoading: boolean;
+  isDemoUser: boolean;
+  isRegisteredUser: boolean;
   activeSpecialty: string | null;
   setActiveSpecialty: (specialtyId: string | null) => void;
   switchUser: (userId: string) => Promise<void>;
+  logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   refreshBookmarks: () => Promise<void>;
   toggleBookmark: (
@@ -94,6 +97,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to logout', e);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('medconnect_logged_in');
+      localStorage.removeItem('medconnect_is_registered_user');
+      document.cookie = 'medconnect_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0';
+    }
+    setCurrentUser(null);
+    setBookmarks([]);
+  }, []);
+
   const toggleBookmark = async (
     itemType: 'post' | 'case_study' | 'news' | 'journal',
     itemId: string,
@@ -122,6 +140,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
+  const isDemoUser = Boolean(currentUser?.is_demo !== false && currentUser?.id?.startsWith('00000000-'));
+  const isRegisteredUser = Boolean(currentUser && !isDemoUser);
+
   return (
     <AppContext.Provider
       value={{
@@ -130,9 +151,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         specialties,
         bookmarks,
         isLoading,
+        isDemoUser,
+        isRegisteredUser,
         activeSpecialty,
         setActiveSpecialty,
         switchUser,
+        logout,
         refreshSession,
         refreshBookmarks,
         toggleBookmark,

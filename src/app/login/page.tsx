@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
@@ -19,11 +19,12 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  UserPlus,
 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { allProfiles, switchUser } = useApp();
+  const { currentUser, allProfiles, switchUser } = useApp();
 
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -32,9 +33,22 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isAlreadyLoggedIn, setIsAlreadyLoggedIn] = useState(false);
+  const [isRegisteredClient, setIsRegisteredClient] = useState(false);
 
-  // Quick Demo Personas
-  const demoPersonas = allProfiles.slice(0, 6);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loggedIn = localStorage.getItem('medconnect_logged_in') === 'true';
+      const isReg = localStorage.getItem('medconnect_is_registered_user') === 'true';
+      setIsAlreadyLoggedIn(loggedIn);
+      setIsRegisteredClient(isReg || Boolean(currentUser && currentUser.is_demo === false));
+    }
+  }, [currentUser]);
+
+  // Quick Demo Personas (Admin persona excluded for registered users)
+  const demoPersonas = allProfiles
+    .filter((p) => (isRegisteredClient ? (!p.is_admin && p.role !== 'admin' && p.id !== '00000000-0000-0000-0000-000000000001') : true))
+    .slice(0, 6);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,11 +71,23 @@ export default function LoginPage() {
         throw new Error(data.error || 'Failed to sign in. Please verify credentials.');
       }
 
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('medconnect_logged_in', 'true');
+        if (data.user?.is_demo === false) {
+          localStorage.setItem('medconnect_is_registered_user', 'true');
+          setIsRegisteredClient(true);
+        } else {
+          localStorage.removeItem('medconnect_is_registered_user');
+          setIsRegisteredClient(false);
+        }
+        document.cookie = 'medconnect_logged_in=true; path=/; max-age=2592000';
+      }
+
       await switchUser(data.user.id);
       setSuccessMsg(`Welcome back, ${data.user.full_name}! Redirecting to clinical feed...`);
       setTimeout(() => {
-        router.push('/');
-      }, 800);
+        router.push('/feed');
+      }, 700);
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check credentials or select a demo persona.');
     } finally {
@@ -74,11 +100,19 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const target = allProfiles.find((p) => p.id === profileId);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('medconnect_logged_in', 'true');
+        localStorage.removeItem('medconnect_is_registered_user');
+        setIsRegisteredClient(false);
+        document.cookie = 'medconnect_logged_in=true; path=/; max-age=2592000';
+      }
+
       await switchUser(profileId);
       setSuccessMsg(`Signed in as ${target?.full_name || 'Verified Doctor'}!`);
       setTimeout(() => {
-        router.push('/');
-      }, 700);
+        router.push('/feed');
+      }, 600);
     } catch (err: any) {
       setError(err.message || 'Failed to switch to selected persona.');
     } finally {
@@ -93,11 +127,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-slate-100/60 to-teal-50/40 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-slate-100/60 to-teal-50/40 flex flex-col justify-center py-10 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center gap-2.5">
+          <Link href="/feed" className="inline-flex items-center gap-2.5">
             <div className="w-11 h-11 rounded-2xl bg-teal-700 flex items-center justify-center text-white shadow-md shadow-teal-700/20">
               <Activity className="w-6 h-6" />
             </div>
@@ -120,7 +154,26 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl px-4">
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-xl px-4">
+        {/* Already Logged In Notice Banner */}
+        {isAlreadyLoggedIn && currentUser && (
+          <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+              <p className="text-emerald-950 font-medium truncate">
+                Active session: <strong>{currentUser.full_name}</strong> ({currentUser.role.replace('_', ' ')})
+              </p>
+            </div>
+            <Link
+              href="/feed"
+              className="inline-flex items-center gap-1 font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100/70 hover:bg-emerald-200 px-3 py-1.5 rounded-xl transition flex-shrink-0"
+            >
+              <span>Go to Home Feed</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
         <div className="bg-white py-8 px-6 sm:px-10 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-200 space-y-6">
           {/* Notifications */}
           {error && (
@@ -166,13 +219,15 @@ export default function LoginPage() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials('sarah.jenkins@medconnect.local')}
-                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold hover:underline"
-                >
-                  Autofill Admin Demo
-                </button>
+                {!isRegisteredClient && (
+                  <button
+                    type="button"
+                    onClick={() => fillDemoCredentials('sarah.jenkins@medconnect.local')}
+                    className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold hover:underline"
+                  >
+                    Autofill Admin Demo
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -206,9 +261,11 @@ export default function LoginPage() {
                 <span className="text-xs text-slate-600">Remember this workstation</span>
               </label>
 
-              <span className="text-xs text-slate-500">
-                Demo code: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">clinical2024</code>
-              </span>
+              {!isRegisteredClient && (
+                <span className="text-xs text-slate-500">
+                  Demo code: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">clinical2024</code>
+                </span>
+              )}
             </div>
 
             <button
@@ -230,6 +287,26 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {/* New User Callout Box */}
+          <div className="p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-teal-950">
+                <UserPlus className="w-4 h-4 text-teal-700" />
+                <span>New to MedConnect AI?</span>
+              </div>
+              <p className="text-[11px] text-teal-800/80">
+                Select from 6 professional categories and join in 2 quick steps.
+              </p>
+            </div>
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition flex-shrink-0"
+            >
+              <span>Create Account</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
           {/* Quick Demo Persona Switcher Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
@@ -245,11 +322,13 @@ export default function LoginPage() {
           {/* Seeded Demo Personas */}
           <div className="space-y-2.5">
             <p className="text-xs text-slate-500 text-center">
-              Select any verified clinical persona to test roles, specialties, and admin access:
+              {isRegisteredClient
+                ? 'Select a peer clinical persona to explore the network:'
+                : 'Select any verified clinical persona to test roles, specialties, and admin access:'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {demoPersonas.map((p) => {
-                const isAdmin = Boolean(p.is_admin || p.role === 'admin');
+                const isAdmin = Boolean((p.is_admin || p.role === 'admin') && !isRegisteredClient);
                 return (
                   <button
                     key={p.id}
@@ -287,18 +366,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Bottom Call to Action: Sign Up */}
-          <div className="pt-4 border-t border-slate-100 text-center space-y-2">
-            <p className="text-xs text-slate-600">
-              Don't have a verified profile yet?{' '}
-              <Link
-                href="/signup"
-                className="font-bold text-teal-700 hover:text-teal-900 hover:underline inline-flex items-center gap-1"
-              >
-                <span>Register New Medical Account</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </p>
+          {/* Bottom Security Note */}
+          <div className="pt-2 text-center">
             <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400">
               <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
               <span>Compliant with HIPAA & Medical Board Peer Verification Guidelines</span>

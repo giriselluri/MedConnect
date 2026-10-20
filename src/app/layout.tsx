@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AppProvider } from '@/lib/context';
 import { Navbar } from '@/components/navbar';
+import { Analytics } from '@vercel/analytics/react';
 
 export const metadata: Metadata = {
   title: 'MedConnect AI — Healthcare & Life Sciences Professional Network',
@@ -38,6 +39,7 @@ export default function RootLayout({
             </div>
           </footer>
         </AppProvider>
+        <Analytics />
       </body>
     </html>
   );

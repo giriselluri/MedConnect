@@ -18,6 +18,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
+import { trackAppEvent } from '@/lib/analytics';
 
 interface PostComposerProps {
   onPostCreated: (post: Post) => void;
@@ -32,7 +33,7 @@ export function PostComposer({
   defaultSpecialtyId,
   placeholder,
 }: PostComposerProps) {
-  const { currentUser, specialties } = useApp();
+  const { currentUser, specialties, isDemoUser } = useApp();
   const [content, setContent] = useState('');
   const [specialtyId, setSpecialtyId] = useState(defaultSpecialtyId || '');
   const [tagsInput, setTagsInput] = useState('');
@@ -136,6 +137,18 @@ export function PostComposer({
 
       const { post } = await res.json();
       onPostCreated(post);
+
+      // Track post created event (only fired on success, excluding demo users)
+      trackAppEvent(
+        'post_created',
+        {
+          specialty: post.specialty_id || 'general',
+          visibility: post.visibility || 'everyone',
+          has_tags: Boolean(post.topic_tags && post.topic_tags.length > 0),
+          has_article: Boolean(post.article_url),
+        },
+        isDemoUser
+      );
 
       // Reset composer
       setContent('');

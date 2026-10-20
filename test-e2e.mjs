@@ -336,6 +336,72 @@ async function runTests() {
     assert(signupRes.status === 201, 'New doctor registered successfully (201 Created)');
     assert(signupRes.data.user.full_name === 'Dr. Evelyn Reed, MD, PhD', 'Profile contains registered clinical credentials');
     assert(signupRes.data.user.email === testEmail, 'Email assigned correctly');
+    assert(signupRes.data.user.role === 'healthcare_professional', 'Healthcare professional role assigned and persisted');
+
+    // Test registering remaining 5 professional categories
+    const pharmaEmail = `pharma.${Date.now()}@biopharma.com`;
+    const pharmaRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Michael Chang, PharmD',
+        email: pharmaEmail,
+        role: 'pharmaceutical_professional',
+        title: 'Director of Medical Affairs',
+        institution: 'NovaPharma Life Sciences',
+        location: 'Philadelphia, PA',
+        specialty_ids: ['oncology'],
+      }),
+    });
+    assert(pharmaRes.status === 201 && pharmaRes.data.user.role === 'pharmaceutical_professional', 'Pharmaceutical Professional registered with correct role');
+
+    const alliedEmail = `allied.${Date.now()}@clinic.org`;
+    const alliedRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Sarah Connor, MSN, APRN, FNP-C',
+        email: alliedEmail,
+        role: 'other_healthcare_professional',
+        title: 'Family Nurse Practitioner',
+        institution: 'Metropolitan Community Health',
+        location: 'Denver, CO',
+        specialty_ids: ['internal_medicine'],
+      }),
+    });
+    assert(alliedRes.status === 201 && alliedRes.data.user.role === 'other_healthcare_professional', 'Other Healthcare Professional registered with correct role');
+
+    const studentEmail = `student.${Date.now()}@medschool.edu`;
+    const studentRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'David Kim, BS',
+        email: studentEmail,
+        role: 'medical_student',
+        title: 'MS-3 Medical Student',
+        institution: 'Stanford School of Medicine',
+        location: 'Palo Alto, CA',
+        specialty_ids: ['neurology'],
+      }),
+    });
+    assert(studentRes.status === 201 && studentRes.data.user.role === 'medical_student', 'Medical Student registered with correct role');
+
+    const researcherEmail = `researcher.${Date.now()}@genomics.org`;
+    const researcherRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Laura Martinez, PhD',
+        email: researcherEmail,
+        role: 'researcher',
+        title: 'Principal Investigator',
+        institution: 'National Genome Center',
+        location: 'Bethesda, MD',
+        bio: 'Functional genomics and computational variant analysis.',
+      }),
+    });
+    assert(researcherRes.status === 201 && researcherRes.data.user.role === 'researcher', 'Clinical Researcher registered with correct role');
 
     // Duplicate email registration should fail
     const dupSignupRes = await request('/api/auth/signup', {
@@ -569,7 +635,61 @@ async function runTests() {
       `Synthesis engine model metadata verified: "${aiSummaryRes.data.summary.model_used}"`
     );
 
-    // Reset back to Dr. Sarah Jenkins
+    // 21. Registered User Isolation & Admin Option Shielding
+    console.log('\n--- 21. Testing Registered User Isolation & Admin Option Shielding ---');
+    const signupTestRes = await request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: 'Dr. Jane Registered Clinician',
+        email: `jane.registered.${Date.now()}@hospital.org`,
+        role: 'healthcare_professional',
+        title: 'Attending Neurologist',
+        institution: 'Metro General Hospital',
+        location: 'Seattle, WA',
+        specialty_ids: ['neurology'],
+        years_of_experience: 7,
+      }),
+    });
+    assert(signupTestRes.status === 201, 'Registered new clinician via signup (201 Created)');
+    const newRegUser = signupTestRes.data.user;
+    assert(newRegUser.is_admin === false, 'Newly registered user has is_admin strictly false');
+    assert(newRegUser.is_demo === false, 'Newly registered user has is_demo strictly false');
+
+    // Switch active session to this newly registered user
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: newRegUser.id }),
+    });
+
+    const regSessionRes = await request('/api/auth/session');
+    assert(regSessionRes.ok, 'Session API returns 200 OK for registered user');
+    assert(regSessionRes.data.user.id === newRegUser.id, 'Session user is the registered user');
+    assert(regSessionRes.data.isDemo === false, 'Session isDemo flag is false for registered user');
+    assert(
+      regSessionRes.data.allProfiles.length === 1 && regSessionRes.data.allProfiles[0].id === newRegUser.id,
+      'Registered user receives ONLY their own profile (all other profiles & admin credentials hidden)'
+    );
+
+    // Reset back to Dr. Sarah Jenkins (Demo Admin)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const demoSessionRes = await request('/api/auth/session');
+    assert(demoSessionRes.data.isDemo === true, 'Switched back to demo admin: isDemo is true');
+    assert(demoSessionRes.data.allProfiles.length >= 10, 'Demo users can view all seeded personas');
+
+    // 22. Testing Exit & Logout Session Invalidation
+    console.log('\n--- 22. Testing Exit & Logout Session Invalidation ---');
+    const logoutRes = await request('/api/auth/logout', { method: 'POST' });
+    assert(logoutRes.ok, 'Logout API returns 200 OK');
+    assert(logoutRes.data.success === true, 'Logout API reports success: true');
+
+    // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

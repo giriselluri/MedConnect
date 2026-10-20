@@ -6,9 +6,10 @@ import { useApp } from '@/lib/context';
 import { Profile, Group } from '@/types';
 import { UserPlus, Sparkles, TrendingUp, Check, ArrowRight } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
+import { trackAppEvent } from '@/lib/analytics';
 
 export function RightSidebar() {
-  const { currentUser, allProfiles } = useApp();
+  const { currentUser, allProfiles, isDemoUser } = useApp();
   const [groups, setGroups] = useState<Group[]>([]);
   const [connectingIds, setConnectingIds] = useState<Record<string, boolean>>({});
   const [sentRequests, setSentRequests] = useState<Record<string, boolean>>({});
@@ -43,6 +44,14 @@ export function RightSidebar() {
       });
       if (res.ok) {
         setSentRequests((prev) => ({ ...prev, [profileId]: true }));
+        const recipient = allProfiles.find((p) => p.id === profileId);
+        trackAppEvent(
+          'connection_requested',
+          {
+            target_role: recipient?.role || 'healthcare_professional',
+          },
+          isDemoUser
+        );
       }
     } catch (e) {
       console.error(e);

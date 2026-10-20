@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminCaseStudiesPage() {
-  const { currentUser, specialties, switchUser } = useApp();
+  const { currentUser, isDemoUser, specialties, switchUser } = useApp();
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -31,7 +31,7 @@ export default function AdminCaseStudiesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
+  const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
 
   const fetchCases = useCallback(async () => {
     setIsLoading(true);
@@ -98,12 +98,21 @@ export default function AdminCaseStudiesPage() {
         <p className="text-xs text-slate-500">
           Case study management requires administrative rights.
         </p>
-        <button
-          onClick={() => switchUser('00000000-0000-0000-0000-000000000001')}
-          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold"
-        >
-          Switch to Dr. Sarah Jenkins (Admin)
-        </button>
+        {isDemoUser ? (
+          <button
+            onClick={() => switchUser('00000000-0000-0000-0000-000000000001')}
+            className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition"
+          >
+            Switch to Dr. Sarah Jenkins (Admin)
+          </button>
+        ) : (
+          <Link
+            href="/feed"
+            className="inline-block px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 transition"
+          >
+            Return to Clinical Feed
+          </Link>
+        )}
       </div>
     );
   }

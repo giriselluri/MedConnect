@@ -942,6 +942,13 @@ export class ServerDatabase {
         if (!parsed.advertisements || parsed.advertisements.length === 0) parsed.advertisements = INITIAL_ADVERTISEMENTS;
         if (!parsed.notifications) parsed.notifications = INITIAL_NOTIFICATIONS;
         if (!parsed.follows) parsed.follows = [];
+        if (parsed.profiles) {
+          parsed.profiles.forEach((p: Profile) => {
+            if (p.is_demo === undefined) {
+              p.is_demo = p.id.startsWith('00000000-');
+            }
+          });
+        }
         return parsed;
       }
     } catch (e) {
@@ -1063,7 +1070,8 @@ export class ServerDatabase {
         ? payload.qualifications
         : ['MD / Healthcare Credential'],
       interests: [],
-      is_admin: payload.role === 'admin',
+      is_admin: false, // Newly registered users are strictly regular users, never platform admins
+      is_demo: false, // Distinguish registered users from seeded demo personas
       is_verified: true,
       connections_count: 0,
       created_at: new Date().toISOString(),

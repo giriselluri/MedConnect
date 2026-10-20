@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context';
 import { Profile, Post } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { PostCard } from '@/components/post-card';
+import { trackAppEvent } from '@/lib/analytics';
 import {
   Building2,
   MapPin,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react';
 
 export default function UserProfilePage({ params }: { params: { id: string } }) {
-  const { currentUser, specialties, refreshSession } = useApp();
+  const { currentUser, specialties, refreshSession, isDemoUser } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +110,18 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
         setProfile(data.profile);
         setIsEditing(false);
         await refreshSession();
+
+        // Track profile completion/updates (only on success, exclude demo)
+        trackAppEvent(
+          'profile_completed',
+          {
+            role: data.profile?.role || 'healthcare_professional',
+            has_institution: Boolean(data.profile?.institution),
+            has_location: Boolean(data.profile?.location),
+            has_bio: Boolean(data.profile?.bio),
+          },
+          isDemoUser
+        );
       }
     } catch (e) {
       console.error(e);
@@ -144,6 +157,13 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
       });
       if (res.ok) {
         setIsConnected(true);
+        trackAppEvent(
+          'connection_requested',
+          {
+            target_role: profile.role || 'healthcare_professional',
+          },
+          isDemoUser
+        );
       }
     } catch (e) {
       console.error(e);
@@ -165,7 +185,7 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
         <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
         <h2 className="text-xl font-bold text-slate-900">Profile Not Found</h2>
         <p className="text-xs text-slate-500">{error || 'Requested clinician profile not found.'}</p>
-        <Link href="/" className="inline-flex items-center px-4 py-2 bg-teal-700 text-white rounded-xl text-xs font-semibold">
+        <Link href="/feed" className="inline-flex items-center px-4 py-2 bg-teal-700 text-white rounded-xl text-xs font-semibold">
           Return to Feed
         </Link>
       </div>
@@ -178,7 +198,7 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
         {/* Banner */}
         <div className="h-36 sm:h-44 bg-gradient-to-r from-slate-900 via-teal-900 to-slate-900 relative">
-          {profile.is_admin && (
+          {profile.is_admin && isDemoUser && (
             <span className="absolute top-4 right-4 px-3 py-1 bg-amber-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow">
               Platform Admin
             </span>

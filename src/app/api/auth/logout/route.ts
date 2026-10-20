@@ -8,7 +8,13 @@ export async function POST() {
     if (profiles.length > 0) {
       serverDb.switchUser(profiles[0].id);
     }
-    return NextResponse.json({ success: true, message: 'Logged out successfully' });
+    const response = NextResponse.json({ success: true, message: 'Logged out successfully' });
+    response.cookies.set('medconnect_logged_in', '', {
+      path: '/',
+      expires: new Date(0),
+      maxAge: 0,
+    });
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Logout failed' }, { status: 500 });
   }
