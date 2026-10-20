@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS public.group_members (
 -- 11. Connections (Professional Networking)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.connections (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     requester_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     recipient_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'blocked')),
@@ -188,6 +188,9 @@ CREATE TABLE IF NOT EXISTS public.connections (
     CONSTRAINT unique_connection_pair UNIQUE (requester_id, recipient_id),
     CONSTRAINT no_self_connection CHECK (requester_id <> recipient_id)
 );
+
+-- Ensure default UUID generation is active on existing connections tables
+ALTER TABLE public.connections ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
 
 -- ------------------------------------------------------------------------------
 -- 12. Follows
@@ -383,7 +386,8 @@ CREATE POLICY "Service role manages group members" ON public.group_members FOR A
 
 -- Connections & Follows
 CREATE POLICY "Connections readable by everyone" ON public.connections FOR SELECT USING (true);
-CREATE POLICY "Service role manages connections" ON public.connections FOR ALL USING (true);
+CREATE POLICY "Service role manages connections" ON public.connections FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "All authenticated users manage connections" ON public.connections FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Follows readable by everyone" ON public.follows FOR SELECT USING (true);
 CREATE POLICY "Service role manages follows" ON public.follows FOR ALL USING (true);
 

@@ -379,18 +379,18 @@ class SupabaseDatabase {
     return (await this.getProfileById(newId))!;
   }
 
-  public async loginUser(identifier: string): Promise<Profile> {
+  public async loginUser(identifier: string): Promise<Profile | null> {
     await this.ensureSeeded();
     const clean = identifier.trim().toLowerCase();
     const { data } = await this.client
       .from('profiles')
       .select('*, profile_specialties(specialty_id, specialties(*))')
-      .or(`email.ilike.${clean},full_name.ilike.%${clean}%`)
+      .or(`id.eq.${identifier},email.ilike.${clean},full_name.ilike.%${clean}%`)
       .limit(1)
       .maybeSingle();
 
     if (!data) {
-      throw new Error(`No registered clinician account found for "${identifier}".`);
+      return null;
     }
     return this.mapProfile(data);
   }
@@ -678,8 +678,26 @@ class SupabaseDatabase {
       if (isAdmin) return true;
       if (effectiveUserId && cs.author_id === effectiveUserId) return true;
       if (effectiveUserId && cs.shared_with_user_ids?.includes(effectiveUserId)) return true;
+      if (cs.password_protected) return true;
       return false;
     });
+
+    // Public case study audience visibility filtering
+    if (!isAdmin) {
+      const connections = effectiveUserId ? await this.getEstablishedConnectionIds(effectiveUserId) : [];
+      list = list.filter((cs) => {
+        if (cs.is_private) return true;
+        if (cs.author_id === effectiveUserId) return true;
+        if (!cs.visibility || cs.visibility === 'everyone') return true;
+        if (cs.visibility === 'connections') {
+          return Boolean(effectiveUserId && cs.author_id && connections.includes(cs.author_id));
+        }
+        if (cs.visibility === 'followers') {
+          return Boolean(effectiveUserId && cs.author_id && connections.includes(cs.author_id));
+        }
+        return true;
+      });
+    }
 
     // Specialty filter
     if (options?.specialtyIds && options.specialtyIds.length > 0) {
@@ -743,6 +761,11 @@ class SupabaseDatabase {
     const isShared = Boolean(cs.shared_with_user_ids?.includes(currentUserId || ''));
     if (cs.is_private && !cs.password_protected && !isAuthor && !isShared && !isAdmin) {
       return null;
+    }
+
+    if (cs.visibility === 'connections' && !isAuthor && !isAdmin) {
+      const isConnected = currentUserId ? await this.areUsersConnected(currentUserId, cs.author_id) : false;
+      if (!isConnected) return null;
     }
 
     const isProtected = Boolean(cs.password_protected);
@@ -950,57 +973,288 @@ class SupabaseDatabase {
 
   // --- Connections ---
 
-  public async getConnections(userId: string): Promise<{ connections: Connection[]; pending_sent: Connection[]; pending_received: Connection[] }> {
+  public async getConnectionById(id: string): Promise<Connection | null> {
     await this.ensureSeeded();
-    const { data } = await this.client
+    const { data, error } = await this.client
+      .from('connections')
+      .select('*, requester:profiles!requester_id(*), recipient:profiles!recipient_id(*)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    const conn = this.mapConnection(data);
+    if (!conn.requester && conn.requester_id) {
+      conn.requester = (await this.getProfileById(conn.requester_id)) || undefined;
+    }
+    if (!conn.recipient && conn.recipient_id) {
+      conn.recipient = (await this.getProfileById(conn.recipient_id)) || undefined;
+    }
+    return conn;
+  }
+
+  public async getConnections(userId: string): Promise<{
+    connections: Connection[];
+    pendingIncoming: Connection[];
+    pendingOutgoing: Connection[];
+    pending_sent: Connection[];
+    pending_received: Connection[];
+  }> {
+    await this.ensureSeeded();
+    const { data, error } = await this.client
       .from('connections')
       .select('*, requester:profiles!requester_id(*), recipient:profiles!recipient_id(*)')
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`);
 
+    if (error) {
+      console.warn('Error fetching connections from Supabase:', error.message);
+    }
+
     const all = (data || []).map((row: any) => this.mapConnection(row));
+
+    // Batch-fetch any missing profiles if PostgREST embedding returned null or array mismatches
+    const missingProfileIds = new Set<string>();
+    for (const c of all) {
+      if (!c.requester && c.requester_id) missingProfileIds.add(c.requester_id);
+      if (!c.recipient && c.recipient_id) missingProfileIds.add(c.recipient_id);
+    }
+    if (missingProfileIds.size > 0) {
+      const { data: missingRows } = await this.client
+        .from('profiles')
+        .select('*, profile_specialties(specialty_id, specialties(*))')
+        .in('id', Array.from(missingProfileIds));
+      if (missingRows && missingRows.length > 0) {
+        const profileMap = new Map<string, Profile>();
+        for (const row of missingRows) {
+          profileMap.set(row.id, this.mapProfile(row));
+        }
+        for (const c of all) {
+          if (!c.requester && profileMap.has(c.requester_id)) {
+            c.requester = profileMap.get(c.requester_id);
+          }
+          if (!c.recipient && profileMap.has(c.recipient_id)) {
+            c.recipient = profileMap.get(c.recipient_id);
+          }
+        }
+      }
+    }
+
+    // Defensive fallback so connection UI cards never disappear
+    for (const c of all) {
+      if (!c.requester && c.requester_id) {
+        c.requester = {
+          id: c.requester_id,
+          email: '',
+          full_name: 'Medical Colleague',
+          title: 'Healthcare Professional',
+          role: 'healthcare_professional',
+          years_of_experience: 5,
+          qualifications: [],
+          interests: [],
+          is_admin: false,
+          is_verified: false,
+          created_at: c.created_at,
+        };
+      }
+      if (!c.recipient && c.recipient_id) {
+        c.recipient = {
+          id: c.recipient_id,
+          email: '',
+          full_name: 'Medical Colleague',
+          title: 'Healthcare Professional',
+          role: 'healthcare_professional',
+          years_of_experience: 5,
+          qualifications: [],
+          interests: [],
+          is_admin: false,
+          is_verified: false,
+          created_at: c.created_at,
+        };
+      }
+    }
+
+    const accepted = all.filter((c) => c.status === 'accepted');
+    const pendingIncoming = all.filter((c) => c.recipient_id === userId && c.status === 'pending');
+    const pendingOutgoing = all.filter((c) => c.requester_id === userId && c.status === 'pending');
+
     return {
-      connections: all.filter((c) => c.status === 'accepted'),
-      pending_sent: all.filter((c) => c.requester_id === userId && c.status === 'pending'),
-      pending_received: all.filter((c) => c.recipient_id === userId && c.status === 'pending'),
+      connections: accepted,
+      pendingIncoming,
+      pendingOutgoing,
+      pending_sent: pendingOutgoing,
+      pending_received: pendingIncoming,
     };
   }
 
   public async sendConnectionRequest(requesterId: string, recipientId: string): Promise<Connection> {
     await this.ensureSeeded();
+    if (requesterId === recipientId) {
+      throw new Error('Cannot send connection request to yourself');
+    }
+
+    // Check bidirectional existing connection
+    const { data: existingRows } = await this.client
+      .from('connections')
+      .select('*, requester:profiles!requester_id(*), recipient:profiles!recipient_id(*)')
+      .or(`and(requester_id.eq.${requesterId},recipient_id.eq.${recipientId}),and(requester_id.eq.${recipientId},recipient_id.eq.${requesterId})`);
+
+    const existing = existingRows && existingRows[0];
+    if (existing) {
+      const mapped = this.mapConnection(existing);
+      if (mapped.status === 'accepted') {
+        return mapped;
+      }
+      if (mapped.status === 'pending') {
+        if (mapped.requester_id === requesterId) {
+          // Already sent outgoing pending request
+          return mapped;
+        } else {
+          // Recipient previously sent request to requester: auto-accept to connect them
+          return this.updateConnectionStatus(mapped.id, 'accepted', requesterId);
+        }
+      }
+      if (mapped.status === 'declined') {
+        // Reactivate connection request
+        const { error: reErr } = await this.client
+          .from('connections')
+          .update({
+            requester_id: requesterId,
+            recipient_id: recipientId,
+            status: 'pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', mapped.id);
+
+        if (reErr) throw new Error(reErr.message);
+
+        const requester = await this.getProfileById(requesterId);
+        await this.createNotification({
+          user_id: recipientId,
+          actor_id: requesterId,
+          type: 'connection_request',
+          message: `${requester?.full_name || 'A clinician'} sent you a connection request.`,
+        });
+
+        const refreshed = await this.getConnectionById(mapped.id);
+        return refreshed || mapped;
+      }
+    }
+
     const newId = `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const connRow = {
       id: newId,
       requester_id: requesterId,
       recipient_id: recipientId,
       status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    const { error } = await this.client.from('connections').insert([connRow]);
-    if (error) throw new Error(error.message);
+    const { error: insertErr } = await this.client.from('connections').insert([connRow]);
+    if (insertErr) throw new Error(insertErr.message);
 
-    const { data } = await this.client.from('connections').select('*, requester:profiles!requester_id(*), recipient:profiles!recipient_id(*)').eq('id', newId).single();
-    return this.mapConnection(data);
+    // Notify recipient
+    const requester = await this.getProfileById(requesterId);
+    await this.createNotification({
+      user_id: recipientId,
+      actor_id: requesterId,
+      type: 'connection_request',
+      message: `${requester?.full_name || 'A clinician'} sent you a connection request.`,
+    });
+
+    const conn = await this.getConnectionById(newId);
+    return conn || this.mapConnection(connRow);
   }
 
   public async updateConnectionStatus(connectionId: string, status: ConnectionStatus, userId: string): Promise<Connection> {
     await this.ensureSeeded();
-    const { error } = await this.client
+
+    const { data: existing, error: fetchErr } = await this.client
+      .from('connections')
+      .select('*')
+      .eq('id', connectionId)
+      .maybeSingle();
+
+    if (fetchErr || !existing) throw new Error('Connection not found');
+    if (existing.recipient_id !== userId && existing.requester_id !== userId) {
+      throw new Error('Unauthorized');
+    }
+
+    const previousStatus = existing.status;
+
+    const { error: updateErr } = await this.client
       .from('connections')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', connectionId);
 
-    if (error) throw new Error(error.message);
-    const { data } = await this.client.from('connections').select('*, requester:profiles!requester_id(*), recipient:profiles!recipient_id(*)').eq('id', connectionId).single();
-    return this.mapConnection(data);
+    if (updateErr) throw new Error(updateErr.message);
+
+    // Update connection counts and send acceptance notification
+    if (status === 'accepted' && previousStatus !== 'accepted') {
+      await this.recalculateConnectionsCount(existing.requester_id);
+      await this.recalculateConnectionsCount(existing.recipient_id);
+
+      const targetUserId = existing.requester_id === userId ? existing.recipient_id : existing.requester_id;
+      const accepter = await this.getProfileById(userId);
+      await this.createNotification({
+        user_id: targetUserId,
+        actor_id: userId,
+        type: 'connection_accepted',
+        message: `${accepter?.full_name || 'Your peer'} accepted your connection request.`,
+      });
+    } else if (previousStatus === 'accepted' && status !== 'accepted') {
+      await this.recalculateConnectionsCount(existing.requester_id);
+      await this.recalculateConnectionsCount(existing.recipient_id);
+    }
+
+    const conn = await this.getConnectionById(connectionId);
+    return conn || this.mapConnection({ ...existing, status });
   }
 
   public async removeConnection(connectionId: string, userId: string): Promise<boolean> {
     await this.ensureSeeded();
+    const { data: existing } = await this.client
+      .from('connections')
+      .select('*')
+      .eq('id', connectionId)
+      .maybeSingle();
+
+    if (!existing) return false;
+    if (existing.requester_id !== userId && existing.recipient_id !== userId) {
+      throw new Error('Unauthorized');
+    }
+
+    const wasAccepted = existing.status === 'accepted';
     const { error } = await this.client.from('connections').delete().eq('id', connectionId);
-    return !error;
+    if (error) return false;
+
+    if (wasAccepted) {
+      await this.recalculateConnectionsCount(existing.requester_id);
+      await this.recalculateConnectionsCount(existing.recipient_id);
+    }
+    return true;
   }
 
-  public async areUsersConnected(userAId: string, userBId: string): Promise<boolean> {
+  private async recalculateConnectionsCount(userId: string): Promise<void> {
+    try {
+      const { count, error } = await this.client
+        .from('connections')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`);
+
+      if (!error && typeof count === 'number') {
+        await this.client
+          .from('profiles')
+          .update({ connections_count: count })
+          .eq('id', userId);
+      }
+    } catch (e) {
+      console.warn('Error updating connection count for profile:', userId, e);
+    }
+  }
+
+  public async areUsersConnected(userAId?: string, userBId?: string): Promise<boolean> {
+    if (!userAId || !userBId) return false;
     if (userAId === userBId) return true;
     await this.ensureSeeded();
     const { data } = await this.client
@@ -1008,19 +1262,26 @@ class SupabaseDatabase {
       .select('id')
       .eq('status', 'accepted')
       .or(`and(requester_id.eq.${userAId},recipient_id.eq.${userBId}),and(requester_id.eq.${userBId},recipient_id.eq.${userAId})`)
-      .maybeSingle();
+      .limit(1);
 
-    return Boolean(data);
+    return Boolean(data && data.length > 0);
   }
 
-  private async getEstablishedConnectionIds(userId: string): Promise<string[]> {
+  public async getEstablishedConnectionIds(userId: string): Promise<string[]> {
+    if (!userId) return [];
+    await this.ensureSeeded();
     const { data } = await this.client
       .from('connections')
       .select('requester_id, recipient_id')
       .eq('status', 'accepted')
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`);
 
-    return (data || []).map((c: any) => (c.requester_id === userId ? c.recipient_id : c.requester_id));
+    const set = new Set<string>();
+    for (const row of data || []) {
+      if (row.requester_id === userId) set.add(row.recipient_id);
+      if (row.recipient_id === userId) set.add(row.requester_id);
+    }
+    return Array.from(set);
   }
 
   // --- Follows ---
@@ -1538,13 +1799,15 @@ class SupabaseDatabase {
   }
 
   private mapConnection(row: any): Connection {
+    const rawReq = Array.isArray(row.requester) ? row.requester[0] : row.requester;
+    const rawRec = Array.isArray(row.recipient) ? row.recipient[0] : row.recipient;
     return {
       id: row.id,
       requester_id: row.requester_id,
       recipient_id: row.recipient_id,
       status: row.status,
-      requester: row.requester ? this.mapProfile(row.requester) : undefined,
-      recipient: row.recipient ? this.mapProfile(row.recipient) : undefined,
+      requester: rawReq ? this.mapProfile(rawReq) : undefined,
+      recipient: rawRec ? this.mapProfile(rawRec) : undefined,
       created_at: row.created_at,
       updated_at: row.updated_at,
     };

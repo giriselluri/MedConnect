@@ -864,6 +864,78 @@ async function runTests() {
     // Clean up test post
     await request(`/api/posts/${bobPostRes.data.post.id}`, { method: 'DELETE' });
 
+    // --- 24. Testing Connections Network State & Case Study Sharing with Connections ---
+    console.log('\n--- 24. Testing Connections Network State & Case Study Sharing ---');
+    // Bob checks connections endpoint
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: bobUser.id }),
+    });
+    const bobConnectionsRes = await request('/api/connections');
+    assert(bobConnectionsRes.ok, 'Bob fetched connections successfully');
+    assert(Array.isArray(bobConnectionsRes.data.connections), 'Connections returned as array');
+    assert(Array.isArray(bobConnectionsRes.data.pendingIncoming), 'pendingIncoming returned as array');
+    assert(Array.isArray(bobConnectionsRes.data.pendingOutgoing), 'pendingOutgoing returned as array');
+    const bobHasAlice = bobConnectionsRes.data.connections.some(
+      (c) => c.requester_id === aliceUser.id || c.recipient_id === aliceUser.id
+    );
+    assert(bobHasAlice, 'Alice appears in Bob active connections list');
+
+    // Alice checks connections endpoint
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: aliceUser.id }),
+    });
+    const aliceConnectionsRes = await request('/api/connections');
+    const aliceHasBob = aliceConnectionsRes.data.connections.some(
+      (c) => c.requester_id === bobUser.id || c.recipient_id === bobUser.id
+    );
+    assert(aliceHasBob, 'Bob appears in Alice active connections list');
+
+    // Alice creates a private case study shared specifically with her accepted connection (Bob)
+    const alicePrivateCaseRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Confidential Case Shared with Bob',
+        short_summary: 'Targeted case consultation shared with accepted peer Dr. Bob.',
+        educational_content: '### Confidential Clinical Observation\nRare hemodynamic presentation.',
+        specialty_ids: ['cardiology'],
+        status: 'published',
+        is_private: true,
+        shared_with_user_ids: [bobUser.id],
+      }),
+    });
+    assert(alicePrivateCaseRes.status === 201, 'Alice created private case study shared with connection Bob');
+    const alicePrivateCaseId = alicePrivateCaseRes.data.caseStudy.id;
+
+    // Bob views the private case study
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: bobUser.id }),
+    });
+    const bobViewPrivateCase = await request(`/api/case-studies/${alicePrivateCaseId}`);
+    assert(bobViewPrivateCase.ok, 'Accepted connection (Bob) can access Alice private case study');
+    assert(
+      bobViewPrivateCase.data.caseStudy.educational_content.includes('Rare hemodynamic presentation'),
+      'Bob can read full educational content of shared private case'
+    );
+
+    // Charlie (not shared with) cannot access the private case study
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: charlieUser.id }),
+    });
+    const charlieViewPrivateCase = await request(`/api/case-studies/${alicePrivateCaseId}`);
+    assert(
+      !charlieViewPrivateCase.ok || charlieViewPrivateCase.status === 404 || !charlieViewPrivateCase.data?.caseStudy,
+      'Unconnected/unshared user (Charlie) is blocked from accessing private case study'
+    );
+
     // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',

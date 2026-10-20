@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { isSupabaseConfigured } from './supabase';
 import { supabaseDb } from './supabase-db';
 import {
@@ -24,25 +22,7 @@ import {
   AdminMetrics,
 } from '@/types';
 
-function getLocalDbFile(): string | null {
-  // Never attempt to create or write to .data under /var/task in serverless (e.g. Vercel)
-  if (
-    process.env.VERCEL === '1' ||
-    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
-    (typeof process.cwd === 'function' && process.cwd().startsWith('/var/task'))
-  ) {
-    return null;
-  }
-  try {
-    const dir = path.join(process.cwd(), '.data');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    return path.join(dir, 'medconnect_db.json');
-  } catch {
-    return null;
-  }
-}
+
 
 export interface DatabaseState {
   specialties: Specialty[];
@@ -950,29 +930,6 @@ export class ServerDatabase {
   }
 
   private loadState(): DatabaseState {
-    const dbFile = getLocalDbFile();
-    if (dbFile && fs.existsSync(dbFile)) {
-      try {
-        const raw = fs.readFileSync(dbFile, 'utf-8');
-        const parsed = JSON.parse(raw);
-        // Ensure new collections exist even on existing DB files
-        if (!parsed.jobs || parsed.jobs.length === 0) parsed.jobs = INITIAL_JOBS;
-        if (!parsed.advertisements || parsed.advertisements.length === 0) parsed.advertisements = INITIAL_ADVERTISEMENTS;
-        if (!parsed.notifications) parsed.notifications = INITIAL_NOTIFICATIONS;
-        if (!parsed.follows) parsed.follows = [];
-        if (parsed.profiles) {
-          parsed.profiles.forEach((p: Profile) => {
-            if (p.is_demo === undefined) {
-              p.is_demo = p.id.startsWith('00000000-');
-            }
-          });
-        }
-        return parsed;
-      } catch (e) {
-        console.warn('Error reading local DB file, initializing fresh state:', e);
-      }
-    }
-
     const defaultState: DatabaseState = {
       specialties: INITIAL_SPECIALTIES,
       profiles: INITIAL_PROFILES,
@@ -1003,18 +960,11 @@ export class ServerDatabase {
       current_user_id: '00000000-0000-0000-0000-000000000001', // Default to Sarah Jenkins (Admin)
     };
 
-    this.saveState(defaultState);
     return defaultState;
   }
 
-  private saveState(state: DatabaseState) {
-    const dbFile = getLocalDbFile();
-    if (!dbFile) return; // In serverless / read-only environment - skip disk write safely
-    try {
-      fs.writeFileSync(dbFile, JSON.stringify(state, null, 2), 'utf-8');
-    } catch (e) {
-      // Safe catch for local dev permission edge cases
-    }
+  private saveState(_state: DatabaseState) {
+    // In-memory state is preserved directly in instance memory; persistent storage is handled by Supabase Postgres.
   }
 
   // --- Auth & Current Session ---
@@ -2068,10 +2018,10 @@ export class ServerDatabase {
       const res = await supabaseDb.getConnections(userId);
       return {
         connections: res.connections,
-        pendingIncoming: res.pending_received,
-        pendingOutgoing: res.pending_sent,
-        pending_sent: res.pending_sent,
-        pending_received: res.pending_received,
+        pendingIncoming: res.pendingIncoming || res.pending_received || [],
+        pendingOutgoing: res.pendingOutgoing || res.pending_sent || [],
+        pending_sent: res.pending_sent || res.pendingOutgoing || [],
+        pending_received: res.pending_received || res.pendingIncoming || [],
       };
     }
     const connections: Connection[] = [];
@@ -2094,7 +2044,13 @@ export class ServerDatabase {
       }
     }
 
-    return { connections, pendingIncoming, pendingOutgoing };
+    return {
+      connections,
+      pendingIncoming,
+      pendingOutgoing,
+      pending_sent: pendingOutgoing,
+      pending_received: pendingIncoming,
+    };
   }
 
   public async sendConnectionRequest(requesterId: string, recipientId: string): Promise<Connection> {
