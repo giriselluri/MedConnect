@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { Profile, Connection } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
+import { SearchableSpecialtyFilter } from '@/components/searchable-specialty-filter';
 import { LeftSidebar } from '@/components/left-sidebar';
 import { trackAppEvent } from '@/lib/analytics';
 import {
@@ -141,14 +142,29 @@ export default function NetworkPage() {
   };
   const filteredProfiles = profiles.filter((p) => {
     if (p.id === currentUser?.id) return false;
+    const lowerSearch = search.trim().toLowerCase();
     const matchesSearch =
-      p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.institution?.toLowerCase().includes(search.toLowerCase());
+      !lowerSearch ||
+      p.full_name.toLowerCase().includes(lowerSearch) ||
+      p.title.toLowerCase().includes(lowerSearch) ||
+      p.institution?.toLowerCase().includes(lowerSearch) ||
+      p.location?.toLowerCase().includes(lowerSearch) ||
+      p.bio?.toLowerCase().includes(lowerSearch) ||
+      p.specialties?.some(
+        (s) =>
+          s.name.toLowerCase().includes(lowerSearch) ||
+          s.id.toLowerCase().includes(lowerSearch)
+      ) ||
+      p.qualifications?.some((q) => q.toLowerCase().includes(lowerSearch));
+
     const matchesRole = !roleFilter || p.role === roleFilter;
     const matchesSpecialty =
       !specialtyFilter ||
-      p.specialties?.some((s) => s.id === specialtyFilter || s.name.toLowerCase() === specialtyFilter.toLowerCase());
+      p.specialties?.some(
+        (s) =>
+          s.id.toLowerCase() === specialtyFilter.toLowerCase() ||
+          s.name.toLowerCase() === specialtyFilter.toLowerCase()
+      );
     return matchesSearch && matchesRole && matchesSpecialty;
   });
 
@@ -349,18 +365,12 @@ export default function NetworkPage() {
                 />
               </div>
 
-              <select
-                value={specialtyFilter}
-                onChange={(e) => setSpecialtyFilter(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none font-medium"
-              >
-                <option value="">All Specialties</option>
-                {specialties.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <SearchableSpecialtyFilter
+                specialties={specialties}
+                selectedSpecialtyId={specialtyFilter}
+                onSelectSpecialty={setSpecialtyFilter}
+                placeholder="All Specialties"
+              />
 
               <select
                 value={roleFilter}

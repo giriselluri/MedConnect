@@ -292,8 +292,9 @@ class SupabaseDatabase {
     let profiles: Profile[] = (data || []).map((row: any) => this.mapProfile(row));
 
     if (filters?.specialty) {
+      const lowerSpec = filters.specialty.toLowerCase();
       profiles = profiles.filter((p) =>
-        p.specialties?.some((s) => s.id === filters.specialty)
+        p.specialties?.some((s) => s.id.toLowerCase() === lowerSpec || s.name.toLowerCase() === lowerSpec)
       );
     }
 
@@ -304,7 +305,10 @@ class SupabaseDatabase {
           p.full_name.toLowerCase().includes(q) ||
           p.institution?.toLowerCase().includes(q) ||
           p.title?.toLowerCase().includes(q) ||
-          p.location?.toLowerCase().includes(q)
+          p.location?.toLowerCase().includes(q) ||
+          p.bio?.toLowerCase().includes(q) ||
+          p.specialties?.some((s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) ||
+          p.qualifications?.some((qual) => qual.toLowerCase().includes(q))
       );
     }
 
@@ -701,8 +705,9 @@ class SupabaseDatabase {
 
     // Specialty filter
     if (options?.specialtyIds && options.specialtyIds.length > 0) {
+      const targetIds = options.specialtyIds.map((s) => s.toLowerCase());
       list = list.filter((cs) =>
-        cs.specialties.some((s) => options.specialtyIds!.includes(s.id))
+        cs.specialties.some((s) => targetIds.includes(s.id.toLowerCase()) || targetIds.includes(s.name.toLowerCase()))
       );
     }
 
@@ -729,7 +734,8 @@ class SupabaseDatabase {
           c.title.toLowerCase().includes(q) ||
           c.short_summary.toLowerCase().includes(q) ||
           c.author_name.toLowerCase().includes(q) ||
-          c.specialties.some((s) => s.name.toLowerCase().includes(q))
+          c.educational_content.toLowerCase().includes(q) ||
+          c.specialties.some((s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q))
       );
     }
 

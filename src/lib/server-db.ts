@@ -1133,7 +1133,10 @@ export class ServerDatabase {
           p.full_name.toLowerCase().includes(q) ||
           p.title.toLowerCase().includes(q) ||
           p.institution?.toLowerCase().includes(q) ||
-          p.bio?.toLowerCase().includes(q)
+          p.bio?.toLowerCase().includes(q) ||
+          p.location?.toLowerCase().includes(q) ||
+          p.specialties?.some((s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) ||
+          p.qualifications?.some((qual) => qual.toLowerCase().includes(q))
       );
     }
     return result;

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import { Profile, CaseStudy, Group, Notification } from '@/types';
 import {
   Home,
   Newspaper,
@@ -30,9 +31,10 @@ import {
   Repeat,
   Check,
   UserCheck,
+  ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import { UserSwitchModal } from './user-switch-modal';
-import { Notification } from '@/types';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -46,6 +48,63 @@ export function Navbar() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Live global search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [liveResults, setLiveResults] = useState<{
+    profiles: Profile[];
+    caseStudies: CaseStudy[];
+    groups: Group[];
+    total: number;
+  } | null>(null);
+  const searchDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close live search on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchDropdownRef.current && !searchDropdownRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Debounced live search
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setLiveResults(null);
+      setIsSearchOpen(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}&limit=4`);
+        if (res.ok) {
+          const data = await res.json();
+          setLiveResults(data);
+          setIsSearchOpen(true);
+        }
+      } catch (err) {
+        console.error('Navbar search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
+    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+  };
 
   const handleLogout = async () => {
     setIsProfileMenuOpen(false);
@@ -149,19 +208,170 @@ export function Navbar() {
                 </div>
               </Link>
 
-              {/* Search bar */}
+              {/* Global Search Bar with Live Preview & Dropdown */}
               {!isAuthPage && (
-                <div className="relative w-full hidden md:block">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search doctors, clinical trials, cases..."
-                    className="w-full pl-9 pr-4 py-1.5 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-xs rounded-full border border-transparent focus:border-teal-500 focus:outline-none transition-all placeholder:text-slate-400 text-slate-800"
-                  />
+                <div className="relative w-full hidden md:block" ref={searchDropdownRef}>
+                  <form onSubmit={handleSearchSubmit} className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      {isSearching ? (
+                        <Loader2 className="h-4 w-4 text-teal-600 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4 text-slate-400" />
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => {
+                        if (liveResults && searchQuery.trim().length >= 2) {
+                          setIsSearchOpen(true);
+                        }
+                      }}
+                      placeholder="Search doctors, clinical trials, cases..."
+                      className="w-full pl-9 pr-8 py-1.5 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-xs rounded-full border border-transparent focus:border-teal-500 focus:outline-none transition-all placeholder:text-slate-400 text-slate-800 font-medium"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setLiveResults(null);
+                          setIsSearchOpen(false);
+                        }}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </form>
+
+                  {/* Live Search Floating Dropdown */}
+                  {isSearchOpen && (
+                    <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                      {isSearching && !liveResults && (
+                        <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 text-teal-600 animate-spin" />
+                          <span>Searching MedConnect network...</span>
+                        </div>
+                      )}
+
+                      {liveResults && liveResults.total > 0 && (
+                        <div className="max-h-[380px] overflow-y-auto p-2 space-y-3">
+                          {/* Colleagues */}
+                          {liveResults.profiles.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
+                                Healthcare Professionals
+                              </span>
+                              <div className="space-y-0.5">
+                                {liveResults.profiles.map((p) => (
+                                  <Link
+                                    key={p.id}
+                                    href={`/profile/${p.id}`}
+                                    onClick={() => {
+                                      setIsSearchOpen(false);
+                                      setSearchQuery('');
+                                    }}
+                                    className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 transition"
+                                  >
+                                    <img
+                                      src={
+                                        p.avatar_url ||
+                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name)}&background=0d9488&color=fff&bold=true`
+                                      }
+                                      alt={p.full_name}
+                                      className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                                    />
+                                    <div className="min-w-0 flex-1 text-xs">
+                                      <p className="font-bold text-slate-900 truncate hover:text-teal-700">
+                                        {p.full_name}
+                                      </p>
+                                      <p className="text-[11px] text-slate-500 truncate">{p.title}</p>
+                                    </div>
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Case Studies */}
+                          {liveResults.caseStudies.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
+                                Clinical Case Studies
+                              </span>
+                              <div className="space-y-0.5">
+                                {liveResults.caseStudies.map((cs) => (
+                                  <Link
+                                    key={cs.id}
+                                    href={`/case-studies/${cs.id}`}
+                                    onClick={() => {
+                                      setIsSearchOpen(false);
+                                      setSearchQuery('');
+                                    }}
+                                    className="p-2 rounded-xl hover:bg-slate-50 transition block text-xs"
+                                  >
+                                    <p className="font-bold text-slate-900 line-clamp-1 hover:text-teal-700">
+                                      {cs.title}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                                      {cs.author_name} • {cs.specialties?.[0]?.name || 'Clinical'}
+                                    </p>
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Communities */}
+                          {liveResults.groups.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
+                                Communities
+                              </span>
+                              <div className="space-y-0.5">
+                                {liveResults.groups.map((g) => (
+                                  <Link
+                                    key={g.id}
+                                    href={`/communities/${g.slug}`}
+                                    onClick={() => {
+                                      setIsSearchOpen(false);
+                                      setSearchQuery('');
+                                    }}
+                                    className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition text-xs"
+                                  >
+                                    <span className="font-bold text-slate-900 truncate pr-2">
+                                      {g.name}
+                                    </span>
+                                    <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                                      {g.members_count} members
+                                    </span>
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {liveResults && liveResults.total === 0 && (
+                        <div className="p-4 text-center text-xs text-slate-500">
+                          No direct matches for &quot;{searchQuery}&quot;. Press Enter to view full search results.
+                        </div>
+                      )}
+
+                      {/* Footer: View All Results */}
+                      <button
+                        type="button"
+                        onClick={handleSearchSubmit as any}
+                        className="w-full p-2.5 bg-slate-50 hover:bg-teal-50 hover:text-teal-800 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition border-t border-slate-100"
+                      >
+                        <span>View all results for &quot;{searchQuery}&quot;</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -420,16 +630,25 @@ export function Navbar() {
         {/* Mobile dropdown drawer */}
         {isMobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-2">
-            <div className="relative w-full mb-3">
+            <form onSubmit={handleSearchSubmit} className="relative w-full mb-3">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search MedConnect..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-100 text-xs rounded-lg border border-transparent focus:outline-none"
+                placeholder="Search doctors, cases, topics..."
+                className="w-full pl-9 pr-9 py-2 bg-slate-100 text-xs rounded-lg border border-transparent focus:border-teal-500 focus:bg-white focus:outline-none transition"
               />
-            </div>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </form>
             {navLinks.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href;

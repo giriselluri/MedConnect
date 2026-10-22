@@ -16,7 +16,7 @@ export async function generateResearchSummary(
   abstractText: string,
   paperTitle?: string
 ): Promise<StructuredResearchSummary> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   if (apiKey && apiKey.trim().length > 0 && !apiKey.startsWith('AIzaSy_demo')) {
     try {

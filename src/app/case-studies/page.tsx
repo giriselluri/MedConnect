@@ -25,6 +25,7 @@ export default function CaseStudiesPage() {
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [specialtySearch, setSpecialtySearch] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [feedMode, setFeedMode] = useState<'personalized' | 'all'>('personalized');
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,8 @@ export default function CaseStudiesPage() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (feedMode === 'personalized') {
+      // Only apply personalized filter when user has not explicitly filtered by specialty or search query
+      if (feedMode === 'personalized' && selectedSpecialties.length === 0 && !searchQuery.trim()) {
         params.set('personalized', 'true');
       }
       if (selectedSpecialties.length > 0) {
@@ -77,7 +79,15 @@ export default function CaseStudiesPage() {
   const clearFilters = () => {
     setSelectedSpecialties([]);
     setSearchQuery('');
+    setSpecialtySearch('');
   };
+
+  const filteredSpecialties = specialties.filter(
+    (s) =>
+      !specialtySearch.trim() ||
+      s.name.toLowerCase().includes(specialtySearch.toLowerCase().trim()) ||
+      s.category?.toLowerCase().includes(specialtySearch.toLowerCase().trim())
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -162,7 +172,7 @@ export default function CaseStudiesPage() {
 
         {/* Multi-Select Specialty Tag Catalogue */}
         <div>
-          <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
               <Filter className="w-3.5 h-3.5 text-teal-600" />
               <span>Filter by Clinical Specialty (Multi-select)</span>
@@ -173,18 +183,31 @@ export default function CaseStudiesPage() {
               )}
             </div>
 
-            {(selectedSpecialties.length > 0 || searchQuery) && (
-              <button
-                onClick={clearFilters}
-                className="text-xs font-semibold text-teal-700 hover:underline"
-              >
-                Clear all filters
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={specialtySearch}
+                  onChange={(e) => setSpecialtySearch(e.target.value)}
+                  placeholder="Filter specialties..."
+                  className="pl-7 pr-3 py-1 bg-slate-50 focus:bg-white text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-teal-500 w-44 transition placeholder:text-slate-400"
+                />
+              </div>
+
+              {(selectedSpecialties.length > 0 || searchQuery || specialtySearch) && (
+                <button
+                  onClick={clearFilters}
+                  className="text-xs font-semibold text-teal-700 hover:underline"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {specialties.map((s) => {
+          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+            {filteredSpecialties.map((s) => {
               const isSelected = selectedSpecialties.includes(s.id);
               return (
                 <SpecialtyBadge
@@ -197,6 +220,11 @@ export default function CaseStudiesPage() {
                 />
               );
             })}
+            {filteredSpecialties.length === 0 && (
+              <p className="text-xs text-slate-400 italic py-1">
+                No specialties matching &quot;{specialtySearch}&quot;
+              </p>
+            )}
           </div>
         </div>
       </div>

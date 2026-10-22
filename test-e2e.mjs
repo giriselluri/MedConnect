@@ -936,6 +936,58 @@ async function runTests() {
       'Unconnected/unshared user (Charlie) is blocked from accessing private case study'
     );
 
+    // --- 25. Testing Global Search API & Searchable Specialty Filtering ---
+    console.log('\n--- 25. Testing Global Search & Searchable Specialty Filtering ---');
+    // Global search for doctor name
+    const searchDoctorRes = await request('/api/search?q=Jenkins');
+    assert(searchDoctorRes.ok, 'Global search endpoint responds 200 OK');
+    assert(
+      searchDoctorRes.data.profiles.some((p) => p.full_name.includes('Dr. Sarah Jenkins')),
+      'Global search successfully locates professional by name (Dr. Sarah Jenkins)'
+    );
+
+    // Global search by clinical keyword / condition
+    const searchKeywordRes = await request('/api/search?q=Cardiology');
+    assert(searchKeywordRes.ok, 'Global search by clinical keyword returns 200 OK');
+    assert(
+      searchKeywordRes.data.profiles.length > 0 || searchKeywordRes.data.caseStudies.length > 0,
+      'Global search finds clinical professionals and case studies for "Cardiology"'
+    );
+
+    // Global search with specialty filter
+    const searchSpecialtyRes = await request('/api/search?specialty=cardiology');
+    assert(searchSpecialtyRes.ok, 'Global search with specialty filter returns 200 OK');
+    assert(
+      searchSpecialtyRes.data.caseStudies.every((cs) =>
+        cs.specialties.some((s) => s.id.toLowerCase() === 'cardiology' || s.name.toLowerCase() === 'cardiology')
+      ),
+      'All case studies returned by specialty filter belong to Cardiology'
+    );
+
+    // Profiles specialty filter check
+    const profilesSpecRes = await request('/api/profiles?specialty=cardiology');
+    assert(profilesSpecRes.ok, 'Profiles filtered by specialty returns 200 OK');
+    assert(
+      profilesSpecRes.data.profiles.every((p) =>
+        p.specialties.some((s) => s.id.toLowerCase() === 'cardiology' || s.name.toLowerCase() === 'cardiology')
+      ),
+      'All profiles returned by specialty filter have Cardiology specialty'
+    );
+
+    // Case studies specialty filter check
+    const caseStudiesSpecRes = await request('/api/case-studies?specialty=cardiology');
+    assert(caseStudiesSpecRes.ok, 'Case studies filtered by specialty returns 200 OK');
+    assert(
+      caseStudiesSpecRes.data.caseStudies.every((cs) =>
+        cs.specialties.some((s) => s.id.toLowerCase() === 'cardiology' || s.name.toLowerCase() === 'cardiology')
+      ),
+      'Case studies endpoint correctly filters by clinical specialty'
+    );
+
+    // Non-existent search query returns clean empty state
+    const emptySearchRes = await request('/api/search?q=xyznonexistentterm123');
+    assert(emptySearchRes.ok && emptySearchRes.data.total === 0, 'Non-existent search term returns 200 OK with total = 0');
+
     // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',

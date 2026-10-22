@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { SpecialtyBadge } from '@/components/specialty-badge';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 import { Group, Connection, Profile } from '@/types';
 import {
   ArrowLeft,
@@ -46,6 +47,7 @@ export default function CreateCaseStudyPage() {
     'ACC/AHA Clinical Practice Guidelines',
   ]);
   const [newReference, setNewReference] = useState('');
+  const [contentTab, setContentTab] = useState<'write' | 'preview'>('write');
 
   // Privacy & Audience State (Core Feature)
   const [isPrivate, setIsPrivate] = useState(false);
@@ -553,38 +555,80 @@ export default function CreateCaseStudyPage() {
 
         {/* 3. Detailed Educational Narrative */}
         <div className="space-y-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-            3. Full Educational Clinical Narrative
-          </h2>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Detailed Case Content (Markdown supported) *
-              </label>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+              3. Full Educational Clinical Narrative
+            </h2>
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-semibold">
               <button
                 type="button"
-                onClick={() =>
-                  setEducationalContent(
-                    `### Clinical Presentation\nA 68-year-old patient with a history of hypertension and hyperlipidemia presents with acute chest discomfort...\n\n### Diagnostic Evaluation\n- ECG: Sinus rhythm with hyperacute T waves in leads V2-V4\n- High-sensitivity Troponin I: 3.8 ng/mL\n- Bedside Echocardiogram: Anterior wall hypokinesis, EF 45%\n\n### Management & Clinical Decision-Making\nEmergency coronary angiography was initiated. Guideline-directed dual antiplatelet therapy (DAPT) and high-intensity statin were administered...\n\n### Teaching Pearls & Outcome\nEarly identification of subtle ischemic changes prevents cardiogenic decompensation.`
-                  )
-                }
-                className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold hover:underline"
+                onClick={() => setContentTab('write')}
+                className={`px-3 py-1 rounded-md transition ${
+                  contentTab === 'write'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                Insert Clinical Template
+                Write (Markdown)
+              </button>
+              <button
+                type="button"
+                onClick={() => setContentTab('preview')}
+                className={`px-3 py-1 rounded-md transition ${
+                  contentTab === 'preview'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Preview Rendered
               </button>
             </div>
-            <textarea
-              rows={10}
-              value={educationalContent}
-              onChange={(e) => setEducationalContent(e.target.value)}
-              placeholder="Structure the case using headers like:
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                Detailed Case Content (Markdown headings, lists, bold text supported) *
+              </label>
+              {contentTab === 'write' && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEducationalContent(
+                      `### Clinical Presentation\nA 68-year-old patient with a history of hypertension and hyperlipidemia presents with acute chest discomfort...\n\n### Diagnostic Evaluation\n- ECG: Sinus rhythm with hyperacute T waves in leads V2-V4\n- High-sensitivity Troponin I: 3.8 ng/mL\n- Bedside Echocardiogram: Anterior wall hypokinesis, EF 45%\n\n### Management & Clinical Decision-Making\nEmergency coronary angiography was initiated. Guideline-directed dual antiplatelet therapy (DAPT) and high-intensity statin were administered...\n\n### Teaching Pearls & Outcome\nEarly identification of subtle ischemic changes prevents cardiogenic decompensation.`
+                    )
+                  }
+                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold hover:underline"
+                >
+                  Insert Clinical Template
+                </button>
+              )}
+            </div>
+
+            {contentTab === 'write' ? (
+              <textarea
+                rows={12}
+                value={educationalContent}
+                onChange={(e) => setEducationalContent(e.target.value)}
+                placeholder="Structure the case using headers like:
 ### Clinical Presentation
+- ECG findings and vital signs
+
 ### Diagnostic Evaluation
+- High-sensitivity biomarker analysis
+
 ### Management & Clinical Decision-Making
-### Teaching Pearls & Outcome"
-              className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl text-xs sm:text-sm font-mono text-slate-800 leading-relaxed"
-            />
+- Primary catheterization or pharmacological rationale
+
+### Teaching Pearls & Outcome
+- Summary take-aways for clinical rounds"
+                className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl text-xs sm:text-sm font-mono text-slate-800 leading-relaxed"
+              />
+            ) : (
+              <div className="p-5 bg-white border border-slate-200 rounded-xl min-h-[220px]">
+                <MarkdownRenderer content={educationalContent} />
+              </div>
+            )}
           </div>
         </div>
 

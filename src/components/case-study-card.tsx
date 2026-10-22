@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CaseStudy } from '@/types';
 import { useApp } from '@/lib/context';
 import {
@@ -22,9 +23,19 @@ interface CaseStudyCardProps {
 }
 
 export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProps) {
+  const router = useRouter();
   const { toggleBookmark } = useApp();
   const [isBookmarked, setIsBookmarked] = useState(Boolean(caseStudy.is_bookmarked));
   const [copied, setCopied] = useState(false);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // If clicked on or inside an interactive element (button or link), let it handle its own event
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a')) {
+      return;
+    }
+    router.push(`/case-studies/${caseStudy.id}`);
+  };
 
   const handleBookmark = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -56,7 +67,18 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
     : 'Draft';
 
   return (
-    <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 hover:shadow-md hover:border-teal-300 transition group flex flex-col justify-between">
+    <div
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          router.push(`/case-studies/${caseStudy.id}`);
+        }
+      }}
+      tabIndex={0}
+      role="article"
+      aria-label={`Case Study: ${caseStudy.title}`}
+      className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 hover:shadow-md hover:border-teal-400 transition cursor-pointer group flex flex-col justify-between active:scale-[0.99] touch-manipulation focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent select-text"
+    >
       <div>
         {/* Top metadata row */}
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -131,6 +153,7 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
         <div className="flex items-center gap-2.5 min-w-0">
           <Link
             href={caseStudy.author_id ? `/profile/${caseStudy.author_id}` : '#'}
+            onClick={(e) => e.stopPropagation()}
             className="flex-shrink-0 group/avatar"
             title={caseStudy.author_name}
           >
@@ -150,6 +173,7 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
           <div className="min-w-0">
             <Link
               href={caseStudy.author_id ? `/profile/${caseStudy.author_id}` : '#'}
+              onClick={(e) => e.stopPropagation()}
               className="font-semibold text-slate-900 hover:text-teal-700 truncate block transition"
             >
               {caseStudy.author_name}

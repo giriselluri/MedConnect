@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { CaseStudy } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 import {
   ArrowLeft,
   Calendar,
@@ -406,9 +407,9 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
               </div>
             )}
 
-            {/* Full Educational Content */}
-            <div className="prose prose-slate max-w-none text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line border-t border-slate-100 pt-6">
-              {caseStudy.educational_content}
+            {/* Full Educational Content with Rich Markdown Rendering */}
+            <div className="border-t border-slate-100 pt-6">
+              <MarkdownRenderer content={caseStudy.educational_content} />
             </div>
 
             {/* Source References */}
