@@ -247,10 +247,11 @@ export interface Notification {
   user_id: string; // recipient
   actor_id: string; // actor
   actor?: Profile;
-  type: 'connection_request' | 'connection_accepted' | 'post_like' | 'post_comment' | 'repost' | 'follow';
+  type: 'connection_request' | 'connection_accepted' | 'post_like' | 'post_comment' | 'repost' | 'follow' | 'case_study' | 'case_study_shared';
   item_id?: string;
   item_title?: string;
   message: string;
+  link?: string;
   is_read: boolean;
   created_at: string;
 }

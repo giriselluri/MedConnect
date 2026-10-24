@@ -988,6 +988,162 @@ async function runTests() {
     const emptySearchRes = await request('/api/search?q=xyznonexistentterm123');
     assert(emptySearchRes.ok && emptySearchRes.data.total === 0, 'Non-existent search term returns 200 OK with total = 0');
 
+    // 18. Testing Private Case Study Password Notification & Access Gate Flow
+    console.log('\n--- 18. Testing Private Case Study Password Notification & Access Gate Flow ---');
+
+    // Switch to Author (Dr. Sarah Jenkins)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const viewerAId = '00000000-0000-0000-0000-000000000002'; // Dr. Marcus Chen
+    const viewerBId = '00000000-0000-0000-0000-000000000003'; // Dr. Aris Thorne
+    const sharedPassword = 'cardioSecure2025!';
+
+    // Author creates a private case study with password shared with Viewer A
+    const createPrivateSharedRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Confidential Case: Post-Infarction Ventricular Septal Defect',
+        short_summary: 'Emergent hemodynamic stabilization and surgical patch repair.',
+        educational_content: 'Step-by-step mechanical circulatory support and delayed surgical repair pearls.',
+        learning_objectives: ['Identify cardiogenic shock hemodynamics', 'Plan ECMO vs Impella bridging'],
+        source_references: ['JACC Heart Failure 2025'],
+        specialty_ids: ['cardiology'],
+        status: 'published',
+        is_private: true,
+        password_protected: true,
+        access_password: sharedPassword,
+        shared_with_user_ids: [viewerAId],
+      }),
+    });
+
+    assert(createPrivateSharedRes.status === 201, 'Created private case study with access password and shared with Viewer A');
+    const privateSharedCase = createPrivateSharedRes.data.caseStudy;
+    assert(privateSharedCase.access_password === undefined, 'Password is NOT exposed in case study creation response');
+
+    // Verify public case studies endpoint does not leak password
+    const publicCaseListRes = await request('/api/case-studies');
+    const leakedPasswordFound = publicCaseListRes.data.caseStudies.some((c) => Boolean(c.access_password));
+    assert(!leakedPasswordFound, 'Public case study feeds strictly NEVER expose access passwords');
+
+    // Switch to Viewer A (Marcus Chen) to verify in-app notification
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: viewerAId }),
+    });
+
+    const viewerANotifsRes = await request('/api/notifications');
+    assert(viewerANotifsRes.ok, 'Viewer A fetched in-app notifications');
+    const sharedNotifForA = viewerANotifsRes.data.notifications.find(
+      (n) => n.item_id === privateSharedCase.id || n.link === `/case-studies/${privateSharedCase.id}`
+    );
+
+    assert(Boolean(sharedNotifForA), 'Viewer A received in-app notification for shared private case study');
+    assert(sharedNotifForA.actor_id === '00000000-0000-0000-0000-000000000001', 'Notification correctly identifies sender (Dr. Sarah Jenkins)');
+    assert(sharedNotifForA.message.includes('Confidential Case: Post-Infarction Ventricular Septal Defect'), 'Notification message includes case study title');
+    assert(sharedNotifForA.message.includes(sharedPassword), 'Notification message includes the access password for Viewer A');
+    assert(sharedNotifForA.link === `/case-studies/${privateSharedCase.id}`, 'Notification includes link to open the case study');
+
+    // Switch to Viewer B (Aris Thorne - not shared with) to verify no unauthorized notification
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: viewerBId }),
+    });
+
+    const viewerBNotifsRes = await request('/api/notifications');
+    const sharedNotifForB = (viewerBNotifsRes.data.notifications || []).find(
+      (n) => n.item_id === privateSharedCase.id || n.link === `/case-studies/${privateSharedCase.id}`
+    );
+    assert(!sharedNotifForB, 'Unshared user (Viewer B) did NOT receive the notification or password');
+
+    // Viewer B attempts to view or unlock private case study
+    const viewerBViewRes = await request(`/api/case-studies/${privateSharedCase.id}`);
+    assert(!viewerBViewRes.ok || viewerBViewRes.status === 404, 'Unshared user cannot access private case study');
+    const viewerBUnlockRes = await request(`/api/case-studies/${privateSharedCase.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: sharedPassword }),
+    });
+    assert(!viewerBUnlockRes.ok, 'Unshared user cannot unlock private case study even with password');
+
+    // Switch back to Viewer A: test link opening and password gate flow
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: viewerAId }),
+    });
+
+    // Opening via link: verify link and fetch case study record
+    assert(sharedNotifForA.link === `/case-studies/${privateSharedCase.id}`, 'Notification link correctly points to /case-studies/:id');
+    const viewerAFetchCaseRes = await request(`/api/case-studies/${privateSharedCase.id}`);
+    assert(viewerAFetchCaseRes.ok, 'Viewer A can fetch case study record');
+    assert(viewerAFetchCaseRes.data.caseStudy.is_locked === true, 'Case study prompts Viewer A with locked gate');
+    assert(viewerAFetchCaseRes.data.caseStudy.educational_content === '', 'Educational content is protected until unlocked');
+
+    // Viewer A enters incorrect password
+    const wrongAttemptRes = await request(`/api/case-studies/${privateSharedCase.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'incorrect-test-pass' }),
+    });
+    assert(wrongAttemptRes.status === 401, 'Incorrect password rejected with 401 Unauthorized');
+    assert(Boolean(wrongAttemptRes.data.error), 'Incorrect password returns descriptive error message');
+
+    // Viewer A enters correct password from notification
+    const correctAttemptRes = await request(`/api/case-studies/${privateSharedCase.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: sharedPassword }),
+    });
+    assert(correctAttemptRes.ok && correctAttemptRes.data.success === true, 'Correct password accepted (200 OK)');
+    assert(correctAttemptRes.data.caseStudy.is_locked === false, 'Case study is unlocked for Viewer A');
+    assert(
+      correctAttemptRes.data.caseStudy.educational_content.includes('Step-by-step mechanical circulatory support'),
+      'Full clinical educational content is revealed to Viewer A'
+    );
+
+    // Test sharing an existing case study via POST /api/case-studies/[id]/share
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const shareWithBRes = await request(`/api/case-studies/${privateSharedCase.id}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: viewerBId }),
+    });
+    assert(shareWithBRes.ok && shareWithBRes.data.success === true, 'Author shared case study with Viewer B via share endpoint');
+
+    // Verify Viewer B now receives notification
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: viewerBId }),
+    });
+
+    const viewerBNewNotifs = await request('/api/notifications');
+    const notifForBAfterShare = viewerBNewNotifs.data.notifications.find(
+      (n) => n.item_id === privateSharedCase.id || n.link === `/case-studies/${privateSharedCase.id}`
+    );
+    assert(Boolean(notifForBAfterShare), 'Viewer B now receives notification with access password after being shared');
+    assert(notifForBAfterShare.message.includes(sharedPassword), 'Viewer B notification includes the access password');
+
+    // Viewer B can now unlock with the password
+    const viewerBUnlockSuccess = await request(`/api/case-studies/${privateSharedCase.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: sharedPassword }),
+    });
+    assert(viewerBUnlockSuccess.ok && viewerBUnlockSuccess.data.caseStudy.is_locked === false, 'Viewer B can now unlock and access the shared private case study');
+
     // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',

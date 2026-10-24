@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
-import { CaseStudy } from '@/types';
+import { CaseStudy, Profile } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
 import {
@@ -28,6 +28,9 @@ import {
   EyeOff,
   KeyRound,
   ShieldAlert,
+  X,
+  Send,
+  Copy,
 } from 'lucide-react';
 
 export default function CaseStudyDetailPage({ params }: { params: { id: string } }) {
@@ -124,12 +127,72 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
     });
   };
 
-  const handleShare = () => {
-    if (typeof window !== 'undefined') {
-      navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  // Share modal state
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [connections, setConnections] = useState<Profile[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+  const [sharingWithId, setSharingWithId] = useState<string | null>(null);
+  const [shareSuccessMsg, setShareSuccessMsg] = useState<string | null>(null);
+  const [shareErrorMsg, setShareErrorMsg] = useState<string | null>(null);
+
+  const isAuthor = Boolean(currentUser?.id && caseStudy?.author_id === currentUser.id);
+  const canSharePrivately = isAuthor || isAdmin;
+
+  const handleShareClick = async () => {
+    if (canSharePrivately) {
+      setIsShareModalOpen(true);
+      if (connections.length === 0) {
+        setIsLoadingConnections(true);
+        try {
+          const res = await fetch('/api/connections');
+          if (res.ok) {
+            const data = await res.json();
+            const connectedProfiles: Profile[] = (data.connections || [])
+              .map((c: any) => (c.requester_id === currentUser?.id ? c.recipient : c.requester))
+              .filter(Boolean);
+            setConnections(connectedProfiles);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsLoadingConnections(false);
+        }
+      }
+    } else {
+      if (typeof window !== 'undefined') {
+        navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     }
+  };
+
+  const handleShareWithPeer = async (peerId: string) => {
+    setSharingWithId(peerId);
+    setShareSuccessMsg(null);
+    setShareErrorMsg(null);
+    try {
+      const res = await fetch(`/api/case-studies/${params.id}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_id: peerId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to share case study');
+      setShareSuccessMsg('Case study shared successfully! In-app notification sent.');
+      if (data.caseStudy) {
+        setCaseStudy(data.caseStudy);
+      }
+      setTimeout(() => setShareSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setShareErrorMsg(err.message || 'Failed to share case study');
+    } finally {
+      setSharingWithId(null);
+    }
+  };
+
+  const handleShare = () => {
+    handleShareClick();
   };
 
   if (isLoading) {
@@ -366,7 +429,7 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
                 </button>
               </div>
 
-              {isDemoUser && (
+              {isDemoUser && !caseStudy.is_private && (
                 <div className="pt-2 text-[11px] text-slate-500 flex items-center justify-center gap-2">
                   <span>💡 Demo passcode:</span>
                   <code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-mono font-bold">clinical2024</code>
@@ -463,6 +526,153 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
           Disclaimer: This educational case study is a synthetic clinical example intended solely for professional peer education and diagnostic reasoning review. It does not contain protected health information (PHI) or identifiable patient details.
         </div>
       </article>
+
+      {/* Share Modal for Author / Admin */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Share Case Study</h3>
+                  <p className="text-[11px] text-slate-500">Share with colleagues and connections</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {shareSuccessMsg && (
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-800 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <span>{shareSuccessMsg}</span>
+              </div>
+            )}
+
+            {shareErrorMsg && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{shareErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Direct Link Section */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">Case Study Link</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={typeof window !== 'undefined' ? window.location.href : ''}
+                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      navigator.clipboard.writeText(window.location.href);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-700 transition"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-teal-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Share Privately with Connections */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Share Privately with Connection</h4>
+                  <p className="text-[10px] text-slate-500">
+                    Recipient will receive an in-app notification with the access link and password.
+                  </p>
+                </div>
+              </div>
+
+              {isLoadingConnections ? (
+                <div className="py-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                  <span>Loading connections...</span>
+                </div>
+              ) : connections.length === 0 ? (
+                <div className="py-4 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  No accepted connections found to share with.
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100">
+                  {connections.map((peer) => {
+                    const isAlreadyShared = caseStudy.shared_with_user_ids?.includes(peer.id);
+                    const isSharingThis = sharingWithId === peer.id;
+
+                    return (
+                      <div key={peer.id} className="pt-1.5 first:pt-0 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={
+                              peer.avatar_url ||
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(peer.full_name)}&background=0d9488&color=fff&bold=true`
+                            }
+                            alt={peer.full_name}
+                            className="w-7 h-7 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">{peer.full_name}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{peer.title || peer.institution}</p>
+                          </div>
+                        </div>
+
+                        {isAlreadyShared ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <Check className="w-3 h-3" />
+                            <span>Shared</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isSharingThis}
+                            onClick={() => handleShareWithPeer(peer.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition"
+                          >
+                            {isSharingThis ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Send className="w-3 h-3" />
+                            )}
+                            <span>Share</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

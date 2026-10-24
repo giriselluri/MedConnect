@@ -739,7 +739,7 @@ class SupabaseDatabase {
       );
     }
 
-    return list;
+    return list.map(({ access_password, ...cs }) => cs);
   }
 
   public async getCaseStudyById(
@@ -765,7 +765,7 @@ class SupabaseDatabase {
 
     const isAuthor = cs.author_id === currentUserId;
     const isShared = Boolean(cs.shared_with_user_ids?.includes(currentUserId || ''));
-    if (cs.is_private && !cs.password_protected && !isAuthor && !isShared && !isAdmin) {
+    if (cs.is_private && !isAuthor && !isShared && !isAdmin) {
       return null;
     }
 
@@ -777,9 +777,10 @@ class SupabaseDatabase {
     const isProtected = Boolean(cs.password_protected);
     const isUnlocked = !isProtected || (bypass && isAdmin) || (Boolean(password) && password === cs.access_password);
 
+    const { access_password, ...sanitized } = cs;
     if (!isUnlocked) {
       return {
-        ...cs,
+        ...sanitized,
         is_locked: true,
         educational_content: '',
         learning_objectives: [],
@@ -788,19 +789,31 @@ class SupabaseDatabase {
     }
 
     return {
-      ...cs,
+      ...sanitized,
       is_locked: false,
     };
   }
 
-  public async verifyCaseStudyPassword(id: string, password: string): Promise<{ valid: boolean; caseStudy?: CaseStudy & { is_locked: boolean }; error?: string }> {
+  public async verifyCaseStudyPassword(
+    id: string,
+    password: string,
+    currentUserId?: string,
+    isAdmin: boolean = false
+  ): Promise<{ valid: boolean; caseStudy?: CaseStudy & { is_locked: boolean }; error?: string }> {
     await this.ensureSeeded();
     const { data } = await this.client.from('case_studies').select('*, case_study_specialties(specialty_id, specialties(*))').eq('id', id).maybeSingle();
     if (!data) return { valid: false, error: 'Case study not found' };
 
     const cs = this.mapCaseStudy(data);
+    const isAuthor = cs.author_id === currentUserId;
+    const isShared = Boolean(cs.shared_with_user_ids?.includes(currentUserId || ''));
+    if (cs.is_private && !isAuthor && !isShared && !isAdmin) {
+      return { valid: false, error: 'Unauthorized: You do not have permission to access this private case study.' };
+    }
+
     if (!cs.password_protected || cs.access_password === password.trim()) {
-      return { valid: true, caseStudy: { ...cs, is_locked: false } };
+      const { access_password, ...sanitized } = cs;
+      return { valid: true, caseStudy: { ...sanitized, is_locked: false } };
     }
     return { valid: false, error: 'Incorrect access password. Please try again.' };
   }
@@ -862,7 +875,79 @@ class SupabaseDatabase {
       );
     }
 
+    // If private or password protected and shared with users, notify each recipient
+    if ((Boolean(payload.is_private) || passwordProtected) && Array.isArray(payload.shared_with_user_ids) && payload.shared_with_user_ids.length > 0) {
+      const recipients = payload.shared_with_user_ids.filter((uid: string) => uid && uid !== author.id);
+      const effectivePassword = csRow.access_password;
+      const passText = passwordProtected && effectivePassword ? ` Access Password: ${effectivePassword}` : '';
+      for (const recipientId of recipients) {
+        await this.createNotification({
+          user_id: recipientId,
+          actor_id: author.id,
+          type: 'case_study',
+          item_id: newId,
+          item_title: payload.title,
+          link: `/case-studies/${newId}`,
+          message: `${author.full_name} shared a private case study with you: "${payload.title}".${passText}`,
+        });
+      }
+    }
+
     return (await this.getCaseStudyById(newId, true, undefined, true, userId))!;
+  }
+
+  public async shareCaseStudy(
+    caseStudyId: string,
+    recipientUserId: string,
+    currentUserId: string,
+    isAdmin: boolean = false
+  ): Promise<{ success: boolean; message: string; caseStudy: CaseStudy }> {
+    await this.ensureSeeded();
+    const { data: rawCs, error: fetchErr } = await this.client
+      .from('case_studies')
+      .select('*')
+      .eq('id', caseStudyId)
+      .maybeSingle();
+
+    if (fetchErr || !rawCs) throw new Error('Case study not found');
+    if (rawCs.author_id !== currentUserId && !isAdmin) {
+      throw new Error('Forbidden: Only the author or administrator can share this case study');
+    }
+
+    const recipient = await this.getProfileById(recipientUserId);
+    if (!recipient) throw new Error('Recipient user not found');
+
+    const currentShared: string[] = Array.isArray(rawCs.shared_with_user_ids) ? rawCs.shared_with_user_ids : [];
+    if (!currentShared.includes(recipientUserId)) {
+      currentShared.push(recipientUserId);
+    }
+
+    const { error: updateErr } = await this.client
+      .from('case_studies')
+      .update({
+        shared_with_user_ids: currentShared,
+        is_private: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', caseStudyId);
+
+    if (updateErr) throw new Error(updateErr.message);
+
+    const author = (await this.getProfileById(rawCs.author_id || currentUserId))!;
+    const passText = rawCs.password_protected && rawCs.access_password ? ` Access Password: ${rawCs.access_password}` : '';
+
+    await this.createNotification({
+      user_id: recipientUserId,
+      actor_id: author.id,
+      type: 'case_study',
+      item_id: rawCs.id,
+      item_title: rawCs.title,
+      link: `/case-studies/${rawCs.id}`,
+      message: `${author.full_name} shared a private case study with you: "${rawCs.title}".${passText}`,
+    });
+
+    const updated = await this.getCaseStudyById(caseStudyId, true, undefined, true, currentUserId);
+    return { success: true, message: 'Case study shared successfully and recipient notified', caseStudy: updated! };
   }
 
   public async updateCaseStudy(id: string, updates: Partial<CaseStudy> & { specialty_ids?: string[] }, userId: string, isAdmin: boolean): Promise<CaseStudy> {

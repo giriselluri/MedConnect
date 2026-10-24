@@ -22,9 +22,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const currentUser = await serverDb.getCurrentUser();
+    const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
     const body = await req.json();
     const password = body.password || '';
-    const result = await serverDb.verifyCaseStudyPassword(params.id, password);
+    const result = await serverDb.verifyCaseStudyPassword(params.id, password, currentUser?.id, isAdmin);
 
     if (!result.valid) {
       return NextResponse.json({ error: result.error || 'Incorrect access password' }, { status: 401 });

@@ -33,6 +33,8 @@ import {
   UserCheck,
   ArrowRight,
   Loader2,
+  KeyRound,
+  Copy,
 } from 'lucide-react';
 import { UserSwitchModal } from './user-switch-modal';
 
@@ -170,6 +172,22 @@ export function Navbar() {
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch {
       // ignore
+    }
+  };
+
+  const [copiedPassNotifId, setCopiedPassNotifId] = useState<string | null>(null);
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (!n.is_read) {
+      await handleMarkSingleRead(n.id);
+    }
+    setIsNotifOpen(false);
+    if (n.link) {
+      router.push(n.link);
+    } else if (n.type === 'case_study' && n.item_id) {
+      router.push(`/case-studies/${n.item_id}`);
+    } else if (n.type === 'connection_request' || n.type === 'connection_accepted') {
+      router.push('/network');
     }
   };
 
@@ -443,37 +461,87 @@ export function Navbar() {
                               No notifications yet
                             </div>
                           ) : (
-                            notifications.slice(0, 10).map((n) => (
-                              <div
-                                key={n.id}
-                                onClick={() => !n.is_read && handleMarkSingleRead(n.id)}
-                                className={`p-3 text-xs transition cursor-pointer flex items-start gap-2.5 hover:bg-slate-50 ${
-                                  !n.is_read ? 'bg-teal-50/40' : ''
-                                }`}
-                              >
-                                <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
-                                  {n.type === 'post_like' && <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />}
-                                  {n.type === 'post_comment' && <MessageSquare className="w-3.5 h-3.5 text-blue-500" />}
-                                  {n.type === 'repost' && <Repeat className="w-3.5 h-3.5 text-emerald-500" />}
-                                  {n.type === 'connection_request' && <UserPlus className="w-3.5 h-3.5 text-amber-500" />}
-                                  {n.type === 'connection_accepted' && <Check className="w-3.5 h-3.5 text-teal-600" />}
-                                  {n.type === 'follow' && <UserCheck className="w-3.5 h-3.5 text-indigo-500" />}
-                                </div>
+                            notifications.slice(0, 10).map((n) => {
+                              const passwordMatch = n.message.match(/Access Password:\s*([^\s"]+)/i);
+                              const extractedPassword = passwordMatch ? passwordMatch[1] : null;
 
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-slate-800 leading-snug ${!n.is_read ? 'font-bold' : 'font-normal'}`}>
-                                    {n.message}
-                                  </p>
-                                  <span className="text-[10px] text-slate-400 mt-1 block">
-                                    {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.created_at).toLocaleDateString()}
-                                  </span>
-                                </div>
+                              return (
+                                <div
+                                  key={n.id}
+                                  onClick={() => handleNotificationClick(n)}
+                                  className={`p-3 text-xs transition cursor-pointer flex items-start gap-2.5 hover:bg-slate-50 ${
+                                    !n.is_read ? 'bg-teal-50/40' : ''
+                                  }`}
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
+                                    {n.type === 'post_like' && <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />}
+                                    {n.type === 'post_comment' && <MessageSquare className="w-3.5 h-3.5 text-blue-500" />}
+                                    {n.type === 'repost' && <Repeat className="w-3.5 h-3.5 text-emerald-500" />}
+                                    {n.type === 'connection_request' && <UserPlus className="w-3.5 h-3.5 text-amber-500" />}
+                                    {n.type === 'connection_accepted' && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                                    {n.type === 'follow' && <UserCheck className="w-3.5 h-3.5 text-indigo-500" />}
+                                    {(n.type === 'case_study' || (n.type as string) === 'case_study_shared') && (
+                                      <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                                    )}
+                                  </div>
 
-                                {!n.is_read && (
-                                  <span className="w-2 h-2 rounded-full bg-teal-600 mt-1 flex-shrink-0" />
-                                )}
-                              </div>
-                            ))
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-slate-800 leading-snug ${!n.is_read ? 'font-bold' : 'font-normal'}`}>
+                                      {n.message}
+                                    </p>
+
+                                    {extractedPassword && (
+                                      <div className="mt-1.5 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                        <span className="text-[10px] text-slate-500 font-medium">Passcode:</span>
+                                        <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold">
+                                          {extractedPassword}
+                                        </code>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (typeof window !== 'undefined') {
+                                              navigator.clipboard.writeText(extractedPassword);
+                                              setCopiedPassNotifId(n.id);
+                                              setTimeout(() => setCopiedPassNotifId(null), 2000);
+                                            }
+                                          }}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition"
+                                          title="Copy access password"
+                                        >
+                                          {copiedPassNotifId === n.id ? (
+                                            <>
+                                              <Check className="w-3 h-3 text-teal-600" />
+                                              <span>Copied</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Copy className="w-3 h-3" />
+                                              <span>Copy</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {(n.link || n.type === 'case_study') && (
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700 hover:text-teal-800 mt-1">
+                                        <span>Open Case Study</span>
+                                        <ArrowRight className="w-3 h-3" />
+                                      </span>
+                                    )}
+
+                                    <span className="text-[10px] text-slate-400 mt-1 block">
+                                      {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+
+                                  {!n.is_read && (
+                                    <span className="w-2 h-2 rounded-full bg-teal-600 mt-1 flex-shrink-0" />
+                                  )}
+                                </div>
+                              );
+                            })
                           )}
                         </div>
                       </div>
