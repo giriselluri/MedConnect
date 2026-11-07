@@ -3,8 +3,9 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
-import { AISession } from '@/types';
+import { AISession, PubMedSearchResult, PubMedArticle } from '@/types';
 import { StructuredResearchSummary } from '@/lib/gemini';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 import { trackAppEvent } from '@/lib/analytics';
 import {
   Sparkles,
@@ -21,6 +22,9 @@ import {
   ExternalLink,
   MessageSquare,
   HelpCircle,
+  Search,
+  CheckCircle2,
+  Globe,
 } from 'lucide-react';
 
 const SAMPLE_ABSTRACT = `Background: Transcatheter aortic valve replacement (TAVR) in patients with bicuspid aortic stenosis has traditionally raised concerns regarding asymmetric calcification, paravalvular leak, and conduction abnormalities.
@@ -32,6 +36,12 @@ function ResearchAssistantContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser, isDemoUser } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'pubmed' | 'abstract'>('pubmed');
+  const [pubmedQuery, setPubmedQuery] = useState('');
+  const [pubmedResult, setPubmedResult] = useState<PubMedSearchResult | null>(null);
+  const [isSearchingPubmed, setIsSearchingPubmed] = useState(false);
+  const [pubmedError, setPubmedError] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -67,6 +77,32 @@ function ResearchAssistantContent() {
     }
     loadSessions();
   }, []);
+
+  const handleSearchPubMed = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!pubmedQuery.trim() || pubmedQuery.trim().length < 3) {
+      setPubmedError('Please enter a clinical question or medical terms (e.g. "HFpEF empagliflozin", "TAVR bicuspid aortic stenosis").');
+      return;
+    }
+    setIsSearchingPubmed(true);
+    setPubmedError(null);
+    try {
+      const res = await fetch('/api/ai/pubmed-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: pubmedQuery.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to search PubMed');
+      }
+      setPubmedResult(data);
+    } catch (err: any) {
+      setPubmedError(err.message || 'Error communicating with PubMed search service');
+    } finally {
+      setIsSearchingPubmed(false);
+    }
+  };
 
   const handleSynthesize = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -195,6 +231,197 @@ function ResearchAssistantContent() {
         </button>
       </div>
 
+      {/* Mode Selector: PubMed Question Search vs Document Synthesis */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-1 flex items-center gap-1 shadow-2xs max-w-md">
+        <button
+          type="button"
+          onClick={() => setActiveTab('pubmed')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'pubmed'
+              ? 'bg-teal-700 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span>PubMed Evidence Search</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('abstract')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'abstract'
+              ? 'bg-teal-700 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          <span>Analyze Abstract Text</span>
+        </button>
+      </div>
+
+      {activeTab === 'pubmed' ? (
+        /* PubMed Evidence Search Mode */
+        <div className="space-y-6">
+          <form onSubmit={handleSearchPubMed} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-teal-600" />
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Ask Medical Research Question (NCBI PubMed)
+                </h2>
+              </div>
+              <span className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-full font-bold">
+                Real Citations Only • No Hallucinations
+              </span>
+            </div>
+
+            {pubmedError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span>{pubmedError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Clinical Question or Research Query *
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={pubmedQuery}
+                  onChange={(e) => setPubmedQuery(e.target.value)}
+                  placeholder="e.g. SGLT2 inhibitors cardiovascular mortality in heart failure, or TAVR in bicuspid aortic stenosis"
+                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isSearchingPubmed}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs transition"
+                >
+                  {isSearchingPubmed ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Searching PubMed...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4" />
+                      <span>Search Evidence</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500">
+              <span>Try queries:</span>
+              {[
+                'HFpEF empagliflozin mortality',
+                'TAVR bicuspid aortic stenosis outcomes',
+                'Dual antiplatelet therapy duration DES',
+                'GLP-1 receptor agonists diabetic kidney disease',
+              ].map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setPubmedQuery(q)}
+                  className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </form>
+
+          {/* PubMed Results & AI Evidence Synthesis */}
+          {pubmedResult && (
+            <div className="space-y-6">
+              {/* AI Evidence Synthesis Card */}
+              <div className="bg-white rounded-2xl border border-teal-200/90 p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-teal-600" />
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      AI Evidence Synthesis
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md font-bold">
+                    Based strictly on {pubmedResult.articles.length} retrieved PubMed articles
+                  </span>
+                </div>
+
+                <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                  <MarkdownRenderer content={pubmedResult.synthesis || pubmedResult.ai_synthesis?.overview || 'Synthesis complete.'} />
+                </div>
+
+                <div className="text-[11px] text-slate-400 italic pt-2 border-t border-slate-100">
+                  Disclaimer: This research summary is generated for peer clinical education and evidence review. All clinical decisions must be guided by verified full-text publications and clinical judgment.
+                </div>
+              </div>
+
+              {/* Sourced PubMed Articles Card */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-teal-600" />
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Sourced NCBI PubMed Publications ({pubmedResult.articles.length})
+                    </h3>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Verified direct links to pubmed.ncbi.nlm.nih.gov
+                  </span>
+                </div>
+
+                {pubmedResult.articles.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-4 text-center">
+                    No articles found matching query "{pubmedResult.query}". Please try broader terms.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {pubmedResult.articles.map((art) => (
+                      <div
+                        key={art.pmid}
+                        className="p-4 rounded-xl border border-slate-200 hover:border-teal-300 bg-slate-50/50 transition flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <a
+                            href={art.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs sm:text-sm font-bold text-slate-900 hover:text-teal-700 transition leading-snug block"
+                          >
+                            {art.title}
+                          </a>
+                          <p className="text-[11px] text-slate-500">
+                            {Array.isArray(art.authors) ? `${art.authors.slice(0, 3).join(', ')}${art.authors.length > 3 ? ' et al.' : ''} • ` : art.authors ? `${art.authors} • ` : ''}
+                            <span className="font-semibold text-slate-700">{art.journal}</span>
+                            {art.pub_date || art.pubdate ? ` (${art.pub_date || art.pubdate})` : ''}
+                          </p>
+                          <span className="text-[10px] text-teal-700 font-mono font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 inline-block">
+                            PMID: {art.pmid}
+                          </span>
+                        </div>
+
+                        <a
+                          href={art.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition"
+                        >
+                          <span>Open on PubMed</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input Form (Col 1-7) */}
         <div className="lg:col-span-7 space-y-6">
@@ -490,6 +717,7 @@ function ResearchAssistantContent() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

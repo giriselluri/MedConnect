@@ -1144,6 +1144,133 @@ async function runTests() {
     });
     assert(viewerBUnlockSuccess.ok && viewerBUnlockSuccess.data.caseStudy.is_locked === false, 'Viewer B can now unlock and access the shared private case study');
 
+    // 14. GP-to-Specialist Clinical Collaboration & AI Features
+    console.log('\n--- 14. Testing GP-to-Specialist Clinical Collaboration & AI Assistant ---');
+
+    // Step A: AI Case Study Assistant Draft Generation & PHI Detection
+    const aiDraftRes = await request('/api/ai/case-assistant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roughNotes: 'Patient John Doe, MRN 482910, 62yo male seen at clinic with new onset exertional dyspnea and atypical chest tightness. Echo shows EF 40% with anterior hypokinesis. On atorvastatin and metoprolol. Question for cardiology: Should we order coronary CTA or proceed directly to invasive cardiac catheterization?',
+      }),
+    });
+    const draft = aiDraftRes.data?.draft;
+    assert(aiDraftRes.ok && Boolean(draft), 'AI Case Study Assistant generated structured draft from rough clinic notes');
+    assert(Boolean(draft?.title), `AI generated structured title: "${draft?.title}"`);
+    assert(Boolean(draft?.questionForSpecialists || draft?.question_for_specialists), `AI extracted question for specialists: "${draft?.questionForSpecialists || draft?.question_for_specialists}"`);
+    assert(draft?.phiFound === true || draft?.phi_risk_detected === true, 'AI PHI scan correctly flagged potential patient identifiers (Name/MRN)');
+    assert((draft?.phiWarnings?.length ?? draft?.phi_warnings?.length ?? 0) > 0, `AI returned ${(draft?.phiWarnings || draft?.phi_warnings)?.length} specific PHI warnings`);
+
+    // Step B: GP Creates Clinical Case with Structured Question for Specialists
+    // Switch to GP (Dr. Emily Rodriguez, Pediatrician/Primary Care persona)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000003' }),
+    });
+
+    const gpCaseRes = await request('/api/case-studies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Diagnostic Workup for Exertional Angina in Intermediate Pre-Test Probability',
+        short_summary: '62-year-old patient presenting in primary care with atypical exertional tightness and reduced left ventricular systolic function.',
+        clinical_background: 'Patient has 10-year history of well-controlled hypertension and hyperlipidemia. Presents with 3-week progressive exertional tightness.',
+        clinical_findings: 'ECG demonstrates nonspecific ST-T wave abnormalities. Resting echocardiogram shows LVEF 40% with mild anterior wall hypokinesis. Troponin negative.',
+        question_for_specialists: 'Would you recommend upfront coronary computed tomography angiography (CCTA) or direct invasive coronary angiography for this patient?',
+        educational_content: '### Clinical Presentation\n62yo with exertional tightness.\n\n### Findings\nLVEF 40%, anterior hypokinesis.\n\n### Specialist Inquiry\nCCTA vs direct invasive angiography.',
+        specialty_ids: ['cardiology'],
+        status: 'published',
+      }),
+    });
+    assert(gpCaseRes.status === 201, 'GP created structured clinical case with question for specialists (201 Created)');
+    const gpCaseId = gpCaseRes.data.caseStudy.id;
+    assert(gpCaseRes.data.caseStudy.question_for_specialists?.includes('coronary computed tomography angiography'), 'Case study saved question_for_specialists');
+
+    // Step C: Specialist Discovers Case and Submits Professional Consultation Response
+    // Switch to Dr. Marcus Chen (Cardiologist)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000002' }),
+    });
+
+    // Verify specialist can query case study
+    const specialistCaseView = await request(`/api/case-studies/${gpCaseId}`);
+    assert(specialistCaseView.ok, 'Specialist can view the GP clinical case study');
+    assert(specialistCaseView.data.caseStudy.question_for_specialists !== undefined, 'Specialist views highlighted question for specialists');
+
+    // Specialist posts consultation response
+    const specialistResponseRes = await request(`/api/case-studies/${gpCaseId}/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '### Cardiology Recommendation\nGiven the reduced LVEF (40%) and regional wall motion abnormality, guideline-directed management favors direct invasive coronary angiography rather than CCTA alone, as revascularization evaluation and hemodynamic assessment will likely be required.\n\n- Initiate guideline-directed medical therapy (beta-blocker, ACEi/ARNI, statin)\n- Perform urgent coronary catheterization within 72 hours\n- Consider viability assessment if multi-vessel disease is identified.',
+      }),
+    });
+    assert(specialistResponseRes.status === 201, 'Specialist submitted consultation response (201 Created)');
+    const respAuthorName = specialistResponseRes.data.response?.author_name || specialistResponseRes.data.response?.author?.full_name;
+    assert(Boolean(respAuthorName?.includes('Marcus Chen')), 'Response attributed to Dr. Marcus Chen');
+
+    // Verify responses list endpoint
+    const responsesListRes = await request(`/api/case-studies/${gpCaseId}/responses`);
+    assert(responsesListRes.ok && responsesListRes.data.responses.length === 1, 'Case study responses list reflects submitted specialist input');
+
+    // Step D: GP Receives Notification of Specialist Response
+    // Switch back to GP (Dr. Emily Rodriguez)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000003' }),
+    });
+
+    const gpNotifs = await request('/api/notifications');
+    const caseResponseNotif = gpNotifs.data.notifications.find(
+      (n) => (n.type === 'case_response' || n.type === 'case_study') && n.item_id === gpCaseId
+    );
+    assert(Boolean(caseResponseNotif), 'GP received in-app notification when specialist responded to their case');
+    assert(Boolean(caseResponseNotif?.message?.includes('Marcus Chen')), 'Notification indicates specialist author name');
+
+    // Step E: AI Discussion Summariser
+    const summaryRes = await request('/api/ai/discussion-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseStudyId: gpCaseId }),
+    });
+    assert(summaryRes.ok && summaryRes.data.summary, 'AI Discussion Summariser generated synthesis of specialist consultation');
+    assert(Boolean(summaryRes.data.summary.executive_summary), 'AI discussion summary includes executive summary');
+    assert(Boolean(summaryRes.data.summary.disclaimer?.includes('peer') || summaryRes.data.summary.disclaimer?.includes('clinical')), 'AI discussion summary includes safety disclaimer');
+
+    // Step F: AI Research Assistant (Real PubMed Search & Synthesis)
+    console.log('\n--- 15. Testing AI Research Assistant (PubMed Search & Evidence Synthesis) ---');
+    const pubmedRes = await request('/api/ai/pubmed-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'coronary computed tomography angiography heart failure' }),
+    });
+    const pubArticles = pubmedRes.data?.articles || pubmedRes.data?.result?.articles || [];
+    const pubSynthesis = pubmedRes.data?.synthesis || pubmedRes.data?.ai_synthesis?.overview || pubmedRes.data?.result?.ai_synthesis?.overview;
+    assert(pubmedRes.ok && pubArticles.length > 0, 'PubMed search API returned response with article citations');
+    assert(pubArticles.length > 0, `Retrieved ${pubArticles.length} verified PubMed articles`);
+    assert(pubArticles[0]?.url?.startsWith('https://pubmed.ncbi.nlm.nih.gov/'), 'Articles contain direct verified pubmed.ncbi.nlm.nih.gov links');
+    assert(Boolean(pubSynthesis), 'AI Evidence Synthesis generated from retrieved PubMed literature');
+
+    // Step G: Admin Analytics Measuring Response Rate Success Metric
+    console.log('\n--- 16. Testing Primary Product Success Metric in Admin Metrics ---');
+    // Switch to Admin (Dr. Sarah Jenkins)
+    await request('/api/auth/switch-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: '00000000-0000-0000-0000-000000000001' }),
+    });
+
+    const adminMetricsRes = await request('/api/admin/metrics');
+    assert(adminMetricsRes.ok, 'Admin metrics endpoint returned 200 OK');
+    assert(typeof adminMetricsRes.data.metrics.responseRatePercent === 'number', `Measured primary success metric: ${adminMetricsRes.data.metrics.responseRatePercent}% specialist response rate`);
+    assert(adminMetricsRes.data.metrics.casesWithResponses >= 1, `Measured ${adminMetricsRes.data.metrics.casesWithResponses} cases receiving specialist input`);
+    assert(adminMetricsRes.data.metrics.totalResponses >= 1, `Measured ${adminMetricsRes.data.metrics.totalResponses} total specialist responses recorded`);
+
     // Switch back to Admin for clean state
     await request('/api/auth/switch-user', {
       method: 'POST',

@@ -36,6 +36,9 @@ export default function CreateCaseStudyPage() {
   // Basic Case Fields
   const [title, setTitle] = useState('');
   const [shortSummary, setShortSummary] = useState('');
+  const [clinicalBackground, setClinicalBackground] = useState('');
+  const [clinicalFindings, setClinicalFindings] = useState('');
+  const [questionForSpecialists, setQuestionForSpecialists] = useState('');
   const [educationalContent, setEducationalContent] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(['cardiology']);
   const [learningObjectives, setLearningObjectives] = useState<string[]>([
@@ -48,6 +51,14 @@ export default function CreateCaseStudyPage() {
   ]);
   const [newReference, setNewReference] = useState('');
   const [contentTab, setContentTab] = useState<'write' | 'preview'>('write');
+  const [isAnonymizedConfirmed, setIsAnonymizedConfirmed] = useState(false);
+
+  // AI Case Study Assistant state
+  const [roughNotes, setRoughNotes] = useState('');
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [aiAssistantDraft, setAiAssistantDraft] = useState<any | null>(null);
+  const [aiAssistantError, setAiAssistantError] = useState<string | null>(null);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
 
   // Privacy & Audience State (Core Feature)
   const [isPrivate, setIsPrivate] = useState(false);
@@ -145,13 +156,68 @@ export default function CreateCaseStudyPage() {
     setSourceReferences(sourceReferences.filter((_, i) => i !== idx));
   };
 
+  const handleGenerateAiDraft = async () => {
+    if (!roughNotes.trim() || roughNotes.trim().length < 20) {
+      setAiAssistantError('Please enter at least 20 characters of rough clinical notes.');
+      return;
+    }
+    setIsGeneratingDraft(true);
+    setAiAssistantError(null);
+    try {
+      const res = await fetch('/api/ai/case-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roughNotes: roughNotes.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate case draft');
+      }
+      setAiAssistantDraft(data.draft);
+    } catch (e: any) {
+      setAiAssistantError(e.message || 'Error running AI Case Study Assistant');
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  };
+
+  const handleApplyAiDraft = () => {
+    if (!aiAssistantDraft) return;
+    if (aiAssistantDraft.title) setTitle(aiAssistantDraft.title);
+    if (aiAssistantDraft.shortSummary) setShortSummary(aiAssistantDraft.shortSummary);
+    if (aiAssistantDraft.clinicalBackground) setClinicalBackground(aiAssistantDraft.clinicalBackground);
+    if (aiAssistantDraft.clinicalFindings) setClinicalFindings(aiAssistantDraft.clinicalFindings);
+    if (aiAssistantDraft.questionForSpecialists) setQuestionForSpecialists(aiAssistantDraft.questionForSpecialists);
+    if (aiAssistantDraft.suggestedSpecialtyIds && aiAssistantDraft.suggestedSpecialtyIds.length > 0) {
+      setSelectedSpecialties(aiAssistantDraft.suggestedSpecialtyIds);
+    }
+    if (aiAssistantDraft.learningObjectives && aiAssistantDraft.learningObjectives.length > 0) {
+      setLearningObjectives(aiAssistantDraft.learningObjectives);
+    }
+    // Auto-compose educational content
+    const composed = `### Clinical Background & Presentation\n${aiAssistantDraft.clinicalBackground || ''}\n\n### Diagnostic & Clinical Findings\n${aiAssistantDraft.clinicalFindings || ''}\n\n### Specific Question for Specialists\n${aiAssistantDraft.questionForSpecialists || ''}`;
+    setEducationalContent(composed);
+    setShowAiAssistant(false);
+  };
+
   const handleSubmit = async (submitStatus: 'published' | 'draft') => {
-    if (!title.trim() || !shortSummary.trim() || !educationalContent.trim()) {
-      setError('Please provide title, short summary, and clinical educational content.');
+    // If educationalContent is empty but structured fields exist, compose them
+    let finalContent = educationalContent.trim();
+    if (!finalContent && (clinicalBackground.trim() || clinicalFindings.trim() || questionForSpecialists.trim())) {
+      finalContent = `### Clinical Background & Presentation\n${clinicalBackground.trim()}\n\n### Diagnostic Findings\n${clinicalFindings.trim()}\n\n### Question for Specialists\n${questionForSpecialists.trim()}`;
+      setEducationalContent(finalContent);
+    }
+
+    if (!title.trim() || !shortSummary.trim() || !finalContent) {
+      setError('Please provide title, short summary, and case content (or complete the clinical sections).');
       return;
     }
     if (selectedSpecialties.length === 0) {
-      setError('Please select at least one clinical specialty tag.');
+      setError('Please select at least one clinical specialty tag for relevant specialists to discover your case.');
+      return;
+    }
+    if (submitStatus === 'published' && !isAnonymizedConfirmed) {
+      setError('Please confirm that this case study is strictly anonymised and contains no patient-identifiable data before publishing.');
       return;
     }
     if (isPrivate && sharedConnectionIds.length === 0 && !passwordProtected) {
@@ -169,7 +235,10 @@ export default function CreateCaseStudyPage() {
         body: JSON.stringify({
           title: title.trim(),
           short_summary: shortSummary.trim(),
-          educational_content: educationalContent.trim(),
+          clinical_background: clinicalBackground.trim() || undefined,
+          clinical_findings: clinicalFindings.trim() || undefined,
+          question_for_specialists: questionForSpecialists.trim() || undefined,
+          educational_content: finalContent,
           learning_objectives: learningObjectives,
           source_references: sourceReferences,
           specialty_ids: selectedSpecialties,
@@ -253,6 +322,144 @@ export default function CreateCaseStudyPage() {
         </div>
       </div>
 
+      {/* AI Case Study Assistant Banner */}
+      <div className="bg-gradient-to-r from-teal-900 via-slate-900 to-teal-950 rounded-2xl p-5 text-white border border-teal-800/60 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="p-2 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-400/30">
+              <Sparkles className="w-5 h-5 text-teal-300" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">AI Case Study Assistant</h3>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-400/30">
+                  Doctor Review Required
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Paste rough clinic notes. AI converts them into a structured draft, scans for patient identifiers (PHI), and recommends specialty tags. You review and approve before publishing.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAiAssistant(!showAiAssistant)}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition shadow-xs"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{showAiAssistant ? 'Hide Assistant' : 'Open Case Assistant'}</span>
+          </button>
+        </div>
+
+        {showAiAssistant && (
+          <div className="space-y-3 pt-3 border-t border-teal-800/80">
+            <div>
+              <label className="block text-xs font-semibold text-teal-200 mb-1">
+                Rough Clinical Notes / Patient Presentation
+              </label>
+              <textarea
+                rows={4}
+                value={roughNotes}
+                onChange={(e) => setRoughNotes(e.target.value)}
+                placeholder="e.g. 54yo M with sudden right-sided hemiparesis and aphasia. Last known well 2 hrs ago. CT head no acute bleed. BP 170/95. History of paroxysmal atrial fibrillation on apixaban. Want neurology input on IV thrombolysis eligibility and endovascular thrombectomy criteria..."
+                className="w-full px-3.5 py-2.5 bg-slate-950/70 border border-teal-700/60 focus:border-teal-400 rounded-xl text-xs font-mono text-slate-100 placeholder:text-slate-500 focus:outline-none"
+              />
+            </div>
+
+            {aiAssistantError && (
+              <div className="p-3 bg-red-900/60 border border-red-700 text-red-200 text-xs rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{aiAssistantError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Note: External AI services never auto-publish. Patient details remain de-identified.
+              </span>
+              <button
+                type="button"
+                disabled={isGeneratingDraft}
+                onClick={handleGenerateAiDraft}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-xl text-xs shadow transition disabled:opacity-50"
+              >
+                {isGeneratingDraft ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Analyzing & Structuring...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Generate Structured Case Draft</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* AI Assistant Generated Draft Preview */}
+            {aiAssistantDraft && (
+              <div className="mt-4 p-4 bg-slate-950/90 rounded-xl border border-teal-600/50 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-teal-300 uppercase tracking-wider">
+                    Generated Case Draft (Preview)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleApplyAiDraft}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Apply to Case Form</span>
+                  </button>
+                </div>
+
+                {/* PHI Warning */}
+                {aiAssistantDraft.phiFound && (
+                  <div className="p-3 bg-amber-950/80 border border-amber-600/80 rounded-lg text-amber-200 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>Potential Patient Identifiers Detected (PHI Audit)</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-200/90 pl-1">
+                      {aiAssistantDraft.phiWarnings.map((w: string, idx: number) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-amber-300 italic pt-1">
+                      Please remove any real names, MRNs, or specific dates before publishing this case study.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2 text-xs text-slate-200">
+                  <div>
+                    <strong className="text-teal-400">Proposed Title:</strong>{' '}
+                    <span>{aiAssistantDraft.title}</span>
+                  </div>
+                  <div>
+                    <strong className="text-teal-400">Question for Specialists:</strong>{' '}
+                    <span className="text-amber-300 font-semibold">{aiAssistantDraft.questionForSpecialists}</span>
+                  </div>
+                  {aiAssistantDraft.suggestedSpecialtyIds?.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <strong className="text-teal-400">Recommended Specialties:</strong>
+                      <div className="flex flex-wrap gap-1">
+                        {aiAssistantDraft.suggestedSpecialtyIds.map((sId: string) => (
+                          <span key={sId} className="px-2 py-0.5 rounded bg-teal-900 text-teal-200 text-[10px] font-bold">
+                            {sId}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -316,6 +523,53 @@ export default function CreateCaseStudyPage() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Structured Clinical Sections */}
+          <div className="pt-2 border-t border-slate-100 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Clinical Background & Patient Presentation (Anonymised)
+              </label>
+              <textarea
+                rows={3}
+                value={clinicalBackground}
+                onChange={(e) => setClinicalBackground(e.target.value)}
+                placeholder="Patient age bracket, relevant comorbidities, timeline of presentation, acute symptoms..."
+                className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl text-xs sm:text-sm text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Diagnostic & Clinical Findings (Labs, ECG, Imaging, Pathology)
+              </label>
+              <textarea
+                rows={3}
+                value={clinicalFindings}
+                onChange={(e) => setClinicalFindings(e.target.value)}
+                placeholder="Pertinent physical exam findings, biomarker levels, imaging results, initial interventions..."
+                className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl text-xs sm:text-sm text-slate-900"
+              />
+            </div>
+
+            {/* Crucial: Question for Specialists */}
+            <div className="p-4 bg-teal-50/70 border-2 border-teal-200 rounded-2xl space-y-1.5">
+              <label className="block text-xs font-bold text-teal-950 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-teal-700" />
+                <span>Specific Question for Specialists * (Core Clinical Inquiry)</span>
+              </label>
+              <p className="text-[11px] text-teal-800/80">
+                Clearly state what diagnostic dilemma, surgical rationale, or therapeutic strategy you need input on from specialists.
+              </p>
+              <textarea
+                rows={2}
+                value={questionForSpecialists}
+                onChange={(e) => setQuestionForSpecialists(e.target.value)}
+                placeholder="e.g. Would you recommend urgent transesophageal echocardiogram (TEE) prior to initiating direct oral anticoagulation in this setting?"
+                className="w-full px-3.5 py-2 bg-white border border-teal-300 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 rounded-xl text-xs sm:text-sm text-slate-900 font-medium"
+              />
             </div>
           </div>
         </div>
@@ -716,6 +970,24 @@ export default function CreateCaseStudyPage() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* De-identification & Compliance Declaration */}
+        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isAnonymizedConfirmed}
+              onChange={(e) => setIsAnonymizedConfirmed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+            />
+            <div className="text-xs text-slate-700 leading-relaxed">
+              <strong className="text-slate-900 block font-bold">Clinical De-identification & Patient Privacy Confirmation *</strong>
+              <span>
+                I confirm that this case study has been completely de-identified in compliance with clinical privacy guidelines (HIPAA/GDPR), containing no patient names, medical record numbers, specific dates of birth, or identifiable patient details.
+              </span>
+            </div>
+          </label>
         </div>
 
         {/* Bottom Submission Bar */}

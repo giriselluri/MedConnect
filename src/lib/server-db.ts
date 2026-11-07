@@ -20,6 +20,7 @@ import {
   Notification,
   Follow,
   AdminMetrics,
+  CaseResponse,
 } from '@/types';
 
 
@@ -32,6 +33,7 @@ export interface DatabaseState {
   post_likes: { post_id: string; user_id: string; created_at: string }[];
   comments: Comment[];
   case_studies: CaseStudy[];
+  case_study_responses: CaseResponse[];
   groups: Group[];
   group_members: { group_id: string; user_id: string; role: string; joined_at: string }[];
   connections: Connection[];
@@ -46,6 +48,7 @@ export interface DatabaseState {
 }
 
 export const INITIAL_SPECIALTIES: Specialty[] = [
+  { id: 'general_practice', name: 'General Practice & Primary Care', category: 'Primary Care', description: 'Primary care consultations, adult medicine, preventive health, and specialist referrals', icon: 'Stethoscope' },
   { id: 'cardiology', name: 'Cardiology', category: 'Clinical Medicine', description: 'Cardiovascular diseases, interventions, and electrophysiology', icon: 'Heart' },
   { id: 'oncology', name: 'Oncology', category: 'Clinical Medicine', description: 'Medical, surgical, and radiation oncology therapeutics', icon: 'ShieldAlert' },
   { id: 'neurology', name: 'Neurology', category: 'Clinical Medicine', description: 'Brain, spinal cord, and neurodegenerative disorders', icon: 'Brain' },
@@ -914,6 +917,27 @@ export const INITIAL_NOTIFICATIONS: Notification[] = [
   },
 ];
 
+export const INITIAL_CASE_STUDY_RESPONSES: CaseResponse[] = [
+  {
+    id: 'case_resp_001',
+    case_study_id: '20000000-0000-0000-0000-000000000001',
+    author_id: '00000000-0000-0000-0000-000000000002', // Marcus Chen
+    author: INITIAL_PROFILES[1],
+    content: 'Given the bicuspid morphology and persistent exertional dyspnea, transesophageal echocardiography (TEE) or ECG-gated 4D cardiac CT is strongly recommended to accurately measure annular dimensions, coronary ostial height, and calcium volume before determining feasibility of surgical repair vs TAVR.',
+    created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: 'case_resp_002',
+    case_study_id: '20000000-0000-0000-0000-000000000001',
+    author_id: '00000000-0000-0000-0000-000000000004', // Sophia Vance
+    author: INITIAL_PROFILES[3],
+    content: 'In agreement with Dr. Chen on the structural imaging. Additionally, given the reported lightheadedness upon exertion, a 48-hour continuous ambulatory rhythm monitor is indicated to exclude transient paroxysmal AV block or non-sustained ventricular arrhythmias prior to intervention.',
+    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+];
+
 export class ServerDatabase {
   private static instance: ServerDatabase;
   private state: DatabaseState;
@@ -943,6 +967,7 @@ export class ServerDatabase {
         INITIAL_POSTS[3].comments![0],
       ],
       case_studies: INITIAL_CASE_STUDIES,
+      case_study_responses: INITIAL_CASE_STUDY_RESPONSES,
       groups: INITIAL_GROUPS,
       group_members: [
         { group_id: '10000000-0000-0000-0000-000000000001', user_id: '00000000-0000-0000-0000-000000000001', role: 'member', joined_at: new Date().toISOString() },
@@ -1635,6 +1660,7 @@ export class ServerDatabase {
         const { access_password, ...sanitized } = cs;
         const group = cs.group_id ? this.state.groups.find((g) => g.id === cs.group_id) : undefined;
         const author = cs.author_id ? this.getLocalProfileById(cs.author_id) : null;
+        const caseResponses = (this.state.case_study_responses || []).filter((r) => r.case_study_id === cs.id);
         return {
           ...sanitized,
           author_name: author?.full_name || cs.author_name,
@@ -1646,6 +1672,7 @@ export class ServerDatabase {
           is_bookmarked: this.state.bookmarks.some(
             (b) => b.user_id === effectiveUserId && b.item_type === 'case_study' && b.item_id === cs.id
           ),
+          responses_count: caseResponses.length,
         };
       })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -1693,6 +1720,17 @@ export class ServerDatabase {
         : undefined);
     const author_institution = author?.institution || cs.author_institution;
 
+    const caseResponses = (this.state.case_study_responses || [])
+      .filter((r) => r.case_study_id === cs.id)
+      .map((r) => {
+        const rAuthor = this.enrichProfile(this.state.profiles.find((p) => p.id === r.author_id) || r.author || this.state.profiles[0]);
+        return {
+          ...r,
+          author: rAuthor,
+        };
+      })
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
     if (!isUnlocked) {
       return {
         ...sanitized,
@@ -1705,6 +1743,8 @@ export class ServerDatabase {
         educational_content: '',
         learning_objectives: [],
         source_references: [],
+        responses_count: caseResponses.length,
+        responses: [],
       };
     }
 
@@ -1716,7 +1756,73 @@ export class ServerDatabase {
       author_institution,
       group,
       is_locked: false,
+      responses_count: caseResponses.length,
+      responses: caseResponses,
     };
+  }
+
+  public async getCaseStudyResponses(caseStudyId: string): Promise<CaseResponse[]> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.getCaseStudyResponses(caseStudyId);
+    }
+    if (!this.state.case_study_responses) this.state.case_study_responses = [];
+    return this.state.case_study_responses
+      .filter((r) => r.case_study_id === caseStudyId)
+      .map((r) => {
+        const author = this.enrichProfile(this.state.profiles.find((p) => p.id === r.author_id) || r.author || this.state.profiles[0]);
+        return {
+          ...r,
+          author,
+        };
+      })
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
+
+  public async createCaseStudyResponse(
+    caseStudyId: string,
+    authorId: string,
+    content: string
+  ): Promise<CaseResponse> {
+    if (isSupabaseConfigured) {
+      return supabaseDb.createCaseStudyResponse(caseStudyId, authorId, content);
+    }
+    const cs = this.state.case_studies.find((c) => c.id === caseStudyId);
+    if (!cs) throw new Error('Case study not found');
+
+    const author = this.enrichProfile(this.state.profiles.find((p) => p.id === authorId) || this.state.profiles[0]);
+    if (!this.state.case_study_responses) this.state.case_study_responses = [];
+
+    const newResponse: CaseResponse = {
+      id: `case_resp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      case_study_id: caseStudyId,
+      author_id: authorId,
+      author,
+      author_name: author.full_name,
+      author_title: author.title,
+      author_avatar_url: author.avatar_url,
+      author_institution: author.institution,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.case_study_responses.push(newResponse);
+
+    // Notify case author if responding clinician is someone else
+    if (cs.author_id && cs.author_id !== authorId) {
+      await this.createNotification({
+        user_id: cs.author_id,
+        actor_id: authorId,
+        type: 'case_study',
+        item_id: caseStudyId,
+        item_title: cs.title,
+        link: `/case-studies/${caseStudyId}`,
+        message: `${author.full_name} (${author.title || 'Specialist'}) provided professional input on your clinical case: "${cs.title}".`,
+      });
+    }
+
+    this.saveState(this.state);
+    return newResponse;
   }
 
   public async verifyCaseStudyPassword(
@@ -1787,8 +1893,11 @@ export class ServerDatabase {
   public async createCaseStudy(
     payload: {
       title: string;
-      short_summary: string;
-      educational_content: string;
+      short_summary?: string;
+      educational_content?: string;
+      clinical_background?: string;
+      clinical_findings?: string;
+      question_for_specialists?: string;
       learning_objectives: string[];
       source_references: string[];
       specialty_ids: string[];
@@ -1805,7 +1914,7 @@ export class ServerDatabase {
     isAdmin: boolean = false
   ): Promise<CaseStudy> {
     if (isSupabaseConfigured) {
-      return supabaseDb.createCaseStudy(payload, userId);
+      return supabaseDb.createCaseStudy(payload as any, userId);
     }
     const author = (payload.author_id ? this.getLocalProfileById(payload.author_id) : null) || this.getLocalProfileById(userId) || (await this.getCurrentUser());
     const specialties = this.state.specialties.filter((s) => payload.specialty_ids.includes(s.id));
@@ -1814,11 +1923,31 @@ export class ServerDatabase {
     const isPrivate = Boolean(payload.is_private);
     const passwordProtected = Boolean(payload.password_protected) || Boolean(payload.access_password && payload.access_password.trim());
 
+    const short_summary =
+      payload.short_summary?.trim() ||
+      payload.question_for_specialists?.trim() ||
+      payload.clinical_background?.trim()?.slice(0, 160) ||
+      payload.title;
+
+    const educational_content =
+      payload.educational_content?.trim() ||
+      [
+        payload.clinical_background && `### Clinical Background & Presentation\n${payload.clinical_background}`,
+        payload.clinical_findings && `### Diagnostic & Clinical Findings\n${payload.clinical_findings}`,
+        payload.question_for_specialists && `### Specific Question for Specialists\n${payload.question_for_specialists}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n') ||
+      short_summary;
+
     const newCaseStudy: CaseStudy = {
       id: `case_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: payload.title,
-      short_summary: payload.short_summary,
-      educational_content: payload.educational_content,
+      short_summary,
+      educational_content,
+      clinical_background: payload.clinical_background?.trim(),
+      clinical_findings: payload.clinical_findings?.trim(),
+      question_for_specialists: payload.question_for_specialists?.trim(),
       learning_objectives: payload.learning_objectives,
       source_references: payload.source_references || [],
       author_id: author.id,
@@ -1834,6 +1963,7 @@ export class ServerDatabase {
       published_at: payload.status !== 'draft' ? new Date().toISOString() : null,
       views_count: 0,
       bookmarks_count: 0,
+      responses_count: 0,
       password_protected: passwordProtected,
       access_password: payload.access_password?.trim() || (passwordProtected ? 'clinical2024' : undefined),
       is_private: isPrivate,
@@ -2407,6 +2537,15 @@ export class ServerDatabase {
     const totalAds = (this.state.advertisements || []).length;
     const activeAds = (this.state.advertisements || []).filter((a) => a.is_active).length;
 
+    const totalResponses = (this.state.case_study_responses || []).length;
+    const casesWithResponses = this.state.case_studies.filter((c) =>
+      (this.state.case_study_responses || []).some((r) => r.case_study_id === c.id)
+    ).length;
+    const responseRatePercent = publishedCaseStudies > 0
+      ? Math.round((casesWithResponses / publishedCaseStudies) * 100)
+      : 0;
+    const totalConnections = (this.state.connections || []).filter((c) => c.status === 'accepted').length;
+
     return {
       totalUsers,
       totalPosts,
@@ -2414,6 +2553,10 @@ export class ServerDatabase {
       publishedCaseStudies,
       draftCaseStudies,
       archivedCaseStudies,
+      casesWithResponses,
+      responseRatePercent,
+      totalResponses,
+      totalConnections,
       totalGroups,
       pendingReports,
       totalJobs,

@@ -134,9 +134,33 @@ CREATE TABLE IF NOT EXISTS public.case_studies (
     shared_with_user_ids TEXT[] DEFAULT '{}',
     visibility TEXT DEFAULT 'everyone',
     group_id TEXT,
+    clinical_background TEXT,
+    clinical_findings TEXT,
+    question_for_specialists TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column additions for existing deployments
+ALTER TABLE public.case_studies ADD COLUMN IF NOT EXISTS clinical_background TEXT;
+ALTER TABLE public.case_studies ADD COLUMN IF NOT EXISTS clinical_findings TEXT;
+ALTER TABLE public.case_studies ADD COLUMN IF NOT EXISTS question_for_specialists TEXT;
+
+-- ------------------------------------------------------------------------------
+-- 7b. Case Study Specialist Responses & Collaboration
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.case_study_responses (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    case_study_id TEXT NOT NULL REFERENCES public.case_studies(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_case_study_responses_case ON public.case_study_responses(case_study_id);
+ALTER TABLE public.case_study_responses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Case study responses readable" ON public.case_study_responses FOR SELECT USING (true);
+CREATE POLICY "Service role manages case study responses" ON public.case_study_responses FOR ALL USING (true);
 
 -- ------------------------------------------------------------------------------
 -- 8. Case Study Specialties (Many-to-Many)

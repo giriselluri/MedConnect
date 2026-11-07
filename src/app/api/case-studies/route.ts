@@ -45,9 +45,25 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    if (!body.title || !body.short_summary || !body.educational_content) {
+    const short_summary =
+      body.short_summary?.trim() ||
+      body.question_for_specialists?.trim() ||
+      body.clinical_background?.trim()?.slice(0, 160) ||
+      '';
+
+    const educational_content =
+      body.educational_content?.trim() ||
+      [
+        body.clinical_background && `### Clinical Background & Presentation\n${body.clinical_background.trim()}`,
+        body.clinical_findings && `### Diagnostic & Clinical Findings\n${body.clinical_findings.trim()}`,
+        body.question_for_specialists && `### Specific Question for Specialists\n${body.question_for_specialists.trim()}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+    if (!body.title || !short_summary || !educational_content) {
       return NextResponse.json(
-        { error: 'Title, short summary, and educational content are required' },
+        { error: 'Title, clinical background, findings, and question for specialists (or educational content) are required.' },
         { status: 400 }
       );
     }
@@ -62,8 +78,11 @@ export async function POST(req: NextRequest) {
     const caseStudy = await serverDb.createCaseStudy(
       {
         title: body.title.trim(),
-        short_summary: body.short_summary.trim(),
-        educational_content: body.educational_content.trim(),
+        short_summary,
+        educational_content,
+        clinical_background: body.clinical_background?.trim(),
+        clinical_findings: body.clinical_findings?.trim(),
+        question_for_specialists: body.question_for_specialists?.trim(),
         learning_objectives: Array.isArray(body.learning_objectives)
           ? body.learning_objectives
           : [body.learning_objectives || 'Demonstrate evidence-based clinical reasoning'],

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
-import { CaseStudy, Profile } from '@/types';
+import { CaseStudy, Profile, CaseResponse, DiscussionSummaryResult } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
 import {
@@ -31,6 +31,9 @@ import {
   X,
   Send,
   Copy,
+  MessageSquare,
+  Stethoscope,
+  HelpCircle,
 } from 'lucide-react';
 
 export default function CaseStudyDetailPage({ params }: { params: { id: string } }) {
@@ -49,7 +52,35 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockSuccess, setUnlockSuccess] = useState(false);
 
+  // Specialist Responses & Discussion State
+  const [responses, setResponses] = useState<CaseResponse[]>([]);
+  const [isLoadingResponses, setIsLoadingResponses] = useState(false);
+  const [newResponse, setNewResponse] = useState('');
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [responseError, setResponseError] = useState<string | null>(null);
+  const [responseSuccess, setResponseSuccess] = useState<string | null>(null);
+
+  // AI Discussion Summariser State
+  const [discussionSummary, setDiscussionSummary] = useState<DiscussionSummaryResult | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
+
+  const loadResponses = async () => {
+    setIsLoadingResponses(true);
+    try {
+      const res = await fetch(`/api/case-studies/${params.id}/responses`);
+      if (res.ok) {
+        const data = await res.json();
+        setResponses(data.responses || []);
+      }
+    } catch (e) {
+      console.error('Error fetching responses:', e);
+    } finally {
+      setIsLoadingResponses(false);
+    }
+  };
 
   useEffect(() => {
     async function loadCase() {
@@ -63,6 +94,11 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
         const data = await res.json();
         setCaseStudy(data.caseStudy);
         setIsBookmarked(Boolean(data.caseStudy.is_bookmarked));
+        if (data.caseStudy.responses) {
+          setResponses(data.caseStudy.responses);
+        } else {
+          loadResponses();
+        }
       } catch (e: any) {
         setError(e.message || 'Error loading case study');
       } finally {
@@ -70,7 +106,61 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
       }
     }
     loadCase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  const handleSubmitResponse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newResponse.trim() || newResponse.trim().length < 15) {
+      setResponseError('Please enter a clinical response of at least 15 characters.');
+      return;
+    }
+    setIsSubmittingResponse(true);
+    setResponseError(null);
+    setResponseSuccess(null);
+    try {
+      const res = await fetch(`/api/case-studies/${params.id}/responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newResponse.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit response');
+      }
+      setResponses((prev) => [...prev, data.response]);
+      setNewResponse('');
+      setResponseSuccess('Your specialist response has been submitted! The case author was notified.');
+      // Update caseStudy response count locally
+      setCaseStudy((prev) => (prev ? { ...prev, responses_count: (prev.responses_count || 0) + 1 } : prev));
+      setTimeout(() => setResponseSuccess(null), 4000);
+    } catch (err: any) {
+      setResponseError(err.message || 'Error submitting response');
+    } finally {
+      setIsSubmittingResponse(false);
+    }
+  };
+
+  const handleSummarizeDiscussion = async () => {
+    setIsSummarizing(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch('/api/ai/discussion-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseStudyId: params.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate discussion summary');
+      }
+      setDiscussionSummary(data.summary);
+    } catch (err: any) {
+      setSummaryError(err.message || 'Error summarizing discussion');
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,6 +406,23 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
             {caseStudy.short_summary}
           </p>
 
+          {/* Highlighted Question for Specialists */}
+          {caseStudy.question_for_specialists && (
+            <div className="mt-4 p-4 sm:p-5 bg-gradient-to-r from-amber-50 to-orange-50/60 border-2 border-amber-300 rounded-2xl shadow-2xs space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-600 text-white shadow-2xs">
+                  <HelpCircle className="w-4 h-4" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  Specific Question for Specialists
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-amber-950 sm:pl-7 leading-relaxed">
+                "{caseStudy.question_for_specialists}"
+              </p>
+            </div>
+          )}
+
           {/* Author bar */}
           <div className="flex flex-wrap items-center gap-4 mt-5 pt-4 border-t border-slate-100 text-xs text-slate-500">
             <Link
@@ -526,6 +633,273 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
           Disclaimer: This educational case study is a synthetic clinical example intended solely for professional peer education and diagnostic reasoning review. It does not contain protected health information (PHI) or identifiable patient details.
         </div>
       </article>
+
+      {/* Specialist Responses & Clinical Discussion Section */}
+      <section className="bg-white rounded-2xl shadow-xs border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-200">
+              <MessageSquare className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+                  Specialist Responses & Consultation
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-800">
+                  {responses.length}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Professional input from verified specialists and medical colleagues.
+              </p>
+            </div>
+          </div>
+
+          {/* AI Discussion Summariser Button */}
+          {responses.length >= 1 && (
+            <button
+              type="button"
+              disabled={isSummarizing}
+              onClick={handleSummarizeDiscussion}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-teal-700 to-slate-900 hover:from-teal-800 hover:to-slate-950 text-white rounded-xl text-xs font-bold shadow-xs transition disabled:opacity-50"
+            >
+              {isSummarizing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Summarising Discussion...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                  <span>AI Discussion Summary</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {summaryError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{summaryError}</span>
+          </div>
+        )}
+
+        {/* AI Discussion Summary Box */}
+        {discussionSummary && (
+          <div className="p-5 bg-gradient-to-br from-teal-50/90 via-cyan-50/50 to-slate-50 rounded-2xl border-2 border-teal-200/90 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-teal-700" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-teal-900">
+                  AI Specialist Discussion Synthesis
+                </h4>
+              </div>
+              <span className="text-[10px] text-teal-700 bg-teal-100 px-2 py-0.5 rounded-md font-semibold">
+                Synthesized across {responses.length} responses
+              </span>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">
+              {discussionSummary.executive_summary || discussionSummary.overview}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {((discussionSummary.clinical_consensus || discussionSummary.consensus_points)?.length ?? 0) > 0 && (
+                <div className="p-3.5 bg-white/90 rounded-xl border border-teal-200 space-y-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                    Key Specialist Consensus
+                  </span>
+                  <ul className="space-y-1 text-xs text-slate-700">
+                    {(discussionSummary.clinical_consensus || discussionSummary.consensus_points || []).map((c: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-teal-600 font-bold">•</span>
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {discussionSummary.differing_perspectives?.length > 0 && (
+                <div className="p-3.5 bg-white/90 rounded-xl border border-amber-200 space-y-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    Differing Perspectives & Nuances
+                  </span>
+                  <ul className="space-y-1 text-xs text-slate-700">
+                    {discussionSummary.differing_perspectives.map((p, idx) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-amber-600 font-bold">•</span>
+                        <span>{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {discussionSummary.unanswered_questions?.length > 0 && (
+              <div className="p-3.5 bg-white/90 rounded-xl border border-slate-200 space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+                  Remaining / Unanswered Questions
+                </span>
+                <ul className="space-y-1 text-xs text-slate-700">
+                  {discussionSummary.unanswered_questions.map((q, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5">
+                      <span className="text-slate-500 font-bold">•</span>
+                      <span>{q}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="text-[10px] text-slate-500 italic pt-1 border-t border-teal-200/50">
+              Disclaimer: {discussionSummary.disclaimer}
+            </div>
+          </div>
+        )}
+
+        {/* Responses List */}
+        {responses.length === 0 ? (
+          <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+            <Stethoscope className="w-8 h-8 text-slate-400 mx-auto" />
+            <h4 className="text-xs font-bold text-slate-800">No specialist responses yet</h4>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+              Are you a specialist in this field? Provide your diagnostic reasoning, procedural suggestions, or guideline-directed input below.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {responses.map((resp) => {
+              const respDate = resp.created_at
+                ? new Date(resp.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Just now';
+
+              const authorName = resp.author?.full_name || resp.author_name || 'Specialist';
+              const authorAvatar =
+                resp.author?.avatar_url ||
+                resp.author_avatar_url ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=0d9488&color=fff&bold=true`;
+              const authorTitle = resp.author?.title || resp.author_title || 'Clinical Specialist';
+              const authorInst = resp.author?.institution || resp.author_institution;
+
+              return (
+                <div
+                  key={resp.id}
+                  className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3 transition hover:border-teal-300"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={resp.author_id ? `/profile/${resp.author_id}` : '#'}
+                      className="flex items-center gap-2.5 group"
+                    >
+                      <img
+                        src={authorAvatar}
+                        alt={authorName}
+                        className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:ring-2 group-hover:ring-teal-500 transition"
+                        onError={(e) => {
+                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=0d9488&color=fff&bold=true`;
+                        }}
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-teal-700 transition">
+                            {authorName}
+                          </span>
+                          <span className="p-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px]">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block">
+                          {authorTitle}
+                          {authorInst ? ` • ${authorInst}` : ''}
+                        </span>
+                      </div>
+                    </Link>
+
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {respDate}
+                    </span>
+                  </div>
+
+                  <div className="pl-0 sm:pl-11 pt-1 text-xs sm:text-sm text-slate-800">
+                    <MarkdownRenderer content={resp.content} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Submit Response Form */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <Stethoscope className="w-3.5 h-3.5 text-teal-600" />
+              <span>Contribute Specialist Input</span>
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              Responding as: <strong>{currentUser?.full_name || 'Verified Clinician'}</strong>
+            </span>
+          </div>
+
+          {responseSuccess && (
+            <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-800 text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+              <span>{responseSuccess}</span>
+            </div>
+          )}
+
+          {responseError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-medium flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>{responseError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmitResponse} className="space-y-3">
+            <textarea
+              rows={4}
+              value={newResponse}
+              onChange={(e) => setNewResponse(e.target.value)}
+              placeholder="Share your diagnostic rationale, recommendations, alternative differentials, or guideline citations..."
+              className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Markdown headings and bullet points supported. Responses notify the case author.
+              </span>
+              <button
+                type="submit"
+                disabled={isSubmittingResponse}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                {isSubmittingResponse ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Submit Specialist Response</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
 
       {/* Share Modal for Author / Admin */}
       {isShareModalOpen && (

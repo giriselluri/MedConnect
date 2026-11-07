@@ -192,13 +192,13 @@ export function Navbar() {
   };
 
   const navLinks = [
-    { href: '/feed', label: 'Home', icon: Home },
-    { href: '/news', label: 'News', icon: Newspaper },
-    { href: '/case-studies', label: 'Case Studies', icon: BookOpen, badge: 'Clinical' },
-    { href: '/journals', label: 'Journals', icon: FileText },
-    { href: '/network', label: 'My Network', icon: Users },
-    { href: '/communities', label: 'Communities', icon: Compass },
+    { href: '/feed', label: 'Dashboard', icon: Home },
+    { href: '/network', label: 'Find Specialists', icon: Users },
+    { href: '/case-studies', label: 'Clinical Cases', icon: BookOpen, badge: 'Cases' },
     { href: '/research-assistant', label: 'AI Assistant', icon: Sparkles, highlight: true },
+    { href: '/news', label: 'News', icon: Newspaper },
+    { href: '/journals', label: 'Journals', icon: FileText },
+    { href: '/communities', label: 'Communities', icon: Compass },
   ];
 
   const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);

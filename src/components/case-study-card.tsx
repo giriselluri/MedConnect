@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Check,
   Lock,
+  MessageSquare,
+  HelpCircle,
 } from 'lucide-react';
 import { SpecialtyBadge } from './specialty-badge';
 
@@ -120,6 +122,17 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
               <ShieldCheck className="w-3 h-3 text-teal-600" />
               Educational Case
             </span>
+            {(caseStudy.responses_count ?? 0) > 0 ? (
+              <span className="text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <MessageSquare className="w-3 h-3 text-teal-700" />
+                {caseStudy.responses_count} {caseStudy.responses_count === 1 ? 'response' : 'responses'}
+              </span>
+            ) : (
+              <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <MessageSquare className="w-3 h-3 text-slate-400" />
+                Seeking Input
+              </span>
+            )}
           </div>
         </div>
 
@@ -134,6 +147,19 @@ export function CaseStudyCard({ caseStudy, onSpecialtyClick }: CaseStudyCardProp
         <p className="text-xs sm:text-sm text-slate-600 mt-2 line-clamp-3 leading-relaxed font-normal">
           {caseStudy.short_summary}
         </p>
+
+        {/* Question for Specialists Snippet */}
+        {caseStudy.question_for_specialists && (
+          <div className="mt-2.5 p-2 bg-gradient-to-r from-amber-50 to-orange-50/50 rounded-lg border border-amber-200/90">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+              <HelpCircle className="w-3 h-3 text-amber-600" />
+              Specialist Question:
+            </span>
+            <p className="text-xs text-amber-950 line-clamp-2 mt-0.5 font-medium">
+              "{caseStudy.question_for_specialists}"
+            </p>
+          </div>
+        )}
 
         {/* Learning Objectives Preview */}
         {caseStudy.learning_objectives && caseStudy.learning_objectives.length > 0 && (

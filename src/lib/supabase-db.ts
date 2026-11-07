@@ -16,6 +16,7 @@ import {
   JobListing,
   Advertisement,
   AdminMetrics,
+  CaseResponse,
 } from '@/types';
 import {
   INITIAL_SPECIALTIES,
@@ -842,8 +843,24 @@ class SupabaseDatabase {
     const csRow = {
       id: newId,
       title: payload.title,
-      short_summary: payload.short_summary,
-      educational_content: payload.educational_content,
+      short_summary:
+        payload.short_summary?.trim() ||
+        (payload as any).question_for_specialists?.trim() ||
+        (payload as any).clinical_background?.trim()?.slice(0, 160) ||
+        payload.title,
+      educational_content:
+        payload.educational_content?.trim() ||
+        [
+          (payload as any).clinical_background && `### Clinical Background & Presentation\n${(payload as any).clinical_background}`,
+          (payload as any).clinical_findings && `### Diagnostic & Clinical Findings\n${(payload as any).clinical_findings}`,
+          (payload as any).question_for_specialists && `### Specific Question for Specialists\n${(payload as any).question_for_specialists}`,
+        ]
+          .filter(Boolean)
+          .join('\n\n') ||
+        payload.title,
+      clinical_background: (payload as any).clinical_background?.trim() || null,
+      clinical_findings: (payload as any).clinical_findings?.trim() || null,
+      question_for_specialists: (payload as any).question_for_specialists?.trim() || null,
       learning_objectives: payload.learning_objectives,
       source_references: payload.source_references || [],
       author_id: author.id,
@@ -948,6 +965,88 @@ class SupabaseDatabase {
 
     const updated = await this.getCaseStudyById(caseStudyId, true, undefined, true, currentUserId);
     return { success: true, message: 'Case study shared successfully and recipient notified', caseStudy: updated! };
+  }
+
+  public async getCaseStudyResponses(caseStudyId: string): Promise<CaseResponse[]> {
+    await this.ensureSeeded();
+    try {
+      const { data, error } = await this.client
+        .from('case_study_responses')
+        .select('*, author:profiles!author_id(*)')
+        .eq('case_study_id', caseStudyId)
+        .order('created_at', { ascending: true });
+
+      if (error || !data) return [];
+      return data.map((row: any) => ({
+        id: row.id,
+        case_study_id: row.case_study_id,
+        author_id: row.author_id,
+        author: row.author ? this.mapProfile(row.author) : {
+          id: row.author_id,
+          email: '',
+          full_name: 'Specialist',
+          title: 'Clinical Specialist',
+          role: 'healthcare_professional',
+          years_of_experience: 5,
+          qualifications: [],
+          interests: [],
+          is_admin: false,
+        },
+        content: row.content,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public async createCaseStudyResponse(
+    caseStudyId: string,
+    authorId: string,
+    content: string
+  ): Promise<CaseResponse> {
+    await this.ensureSeeded();
+    const caseStudy = await this.getCaseStudyById(caseStudyId, true, undefined, true, authorId);
+    if (!caseStudy) throw new Error('Case study not found');
+
+    const newId = `case_resp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const row = {
+      id: newId,
+      case_study_id: caseStudyId,
+      author_id: authorId,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.client.from('case_study_responses').insert([row]);
+    if (error) throw new Error(error.message);
+
+    const author = (await this.getProfileById(authorId))!;
+
+    // Notify case author if responding clinician is someone else
+    if (caseStudy.author_id && caseStudy.author_id !== authorId) {
+      await this.createNotification({
+        user_id: caseStudy.author_id,
+        actor_id: authorId,
+        type: 'case_study',
+        item_id: caseStudyId,
+        item_title: caseStudy.title,
+        link: `/case-studies/${caseStudyId}`,
+        message: `${author.full_name} (${author.title || 'Specialist'}) provided professional input on your clinical case: "${caseStudy.title}".`,
+      });
+    }
+
+    return {
+      id: newId,
+      case_study_id: caseStudyId,
+      author_id: authorId,
+      author,
+      content: row.content,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   }
 
   public async updateCaseStudy(id: string, updates: Partial<CaseStudy> & { specialty_ids?: string[] }, userId: string, isAdmin: boolean): Promise<CaseStudy> {
@@ -1753,7 +1852,7 @@ class SupabaseDatabase {
 
   public async getAdminMetrics(): Promise<AdminMetrics> {
     await this.ensureSeeded();
-    const [profiles, casesTotal, casesPublished, casesDraft, casesArchived, posts, groups, reports, jobsTotal, jobsActive, adsTotal, adsActive] = await Promise.all([
+    const [profiles, casesTotal, casesPublished, casesDraft, casesArchived, posts, groups, reports, jobsTotal, jobsActive, adsTotal, adsActive, responses, connections] = await Promise.all([
       this.client.from('profiles').select('id', { count: 'exact', head: true }),
       this.client.from('case_studies').select('id', { count: 'exact', head: true }),
       this.client.from('case_studies').select('id', { count: 'exact', head: true }).eq('status', 'published'),
@@ -1766,15 +1865,26 @@ class SupabaseDatabase {
       this.client.from('jobs').select('id', { count: 'exact', head: true }).eq('is_active', true),
       this.client.from('advertisements').select('id', { count: 'exact', head: true }),
       this.client.from('advertisements').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      this.client.from('case_study_responses').select('id, case_study_id'),
+      this.client.from('connections').select('id', { count: 'exact', head: true }).eq('status', 'accepted'),
     ]);
+
+    const respData = responses.data || [];
+    const uniqueCasesWithResp = new Set(respData.map((r: any) => r.case_study_id)).size;
+    const publishedCount = casesPublished.count || 0;
+    const responseRatePercent = publishedCount > 0 ? Math.round((uniqueCasesWithResp / publishedCount) * 100) : 0;
 
     return {
       totalUsers: profiles.count || 0,
       totalPosts: posts.count || 0,
       totalCaseStudies: casesTotal.count || 0,
-      publishedCaseStudies: casesPublished.count || 0,
+      publishedCaseStudies: publishedCount,
       draftCaseStudies: casesDraft.count || 0,
       archivedCaseStudies: casesArchived.count || 0,
+      casesWithResponses: uniqueCasesWithResp,
+      responseRatePercent,
+      totalResponses: respData.length,
+      totalConnections: connections.count || 0,
       totalGroups: groups.count || 0,
       pendingReports: reports.count || 0,
       totalJobs: jobsTotal.count || 0,
@@ -1866,6 +1976,9 @@ class SupabaseDatabase {
       title: sanitized.title,
       short_summary: sanitized.short_summary,
       educational_content: sanitized.educational_content,
+      clinical_background: sanitized.clinical_background,
+      clinical_findings: sanitized.clinical_findings,
+      question_for_specialists: sanitized.question_for_specialists,
       learning_objectives: sanitized.learning_objectives || [],
       source_references: sanitized.source_references || [],
       author_id: sanitized.author_id,
@@ -1877,6 +1990,7 @@ class SupabaseDatabase {
       published_at: sanitized.published_at,
       views_count: sanitized.views_count || 0,
       bookmarks_count: sanitized.bookmarks_count || 0,
+      responses_count: sanitized.responses_count || 0,
       password_protected: Boolean(sanitized.password_protected),
       access_password,
       is_private: Boolean(sanitized.is_private),

@@ -29,6 +29,10 @@ interface Metrics {
   archivedCaseStudies: number;
   totalGroups: number;
   pendingReports: number;
+  casesWithResponses?: number;
+  responseRatePercent?: number;
+  totalResponses?: number;
+  totalConnections?: number;
 }
 
 export default function AdminDashboardPage() {
@@ -147,7 +151,48 @@ export default function AdminDashboardPage() {
             <p className="text-xs font-semibold">{error}</p>
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-4">
+            {/* Primary Collaboration Success Metric Card */}
+            <div className="bg-gradient-to-r from-teal-50 via-cyan-50 to-white rounded-2xl border-2 border-teal-300 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-1">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-teal-800 bg-teal-100 border border-teal-300 px-2.5 py-0.5 rounded-full inline-block">
+                  Primary Product Success Metric
+                </span>
+                <h3 className="text-xl font-extrabold text-slate-900">
+                  Specialist Case Response Rate
+                </h3>
+                <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
+                  Percentage of shared clinical cases that receive at least one relevant specialist response.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-6 sm:gap-8 flex-shrink-0">
+                <div className="text-center sm:text-right">
+                  <div className="text-4xl sm:text-5xl font-black text-teal-700 tracking-tight">
+                    {metrics.responseRatePercent ?? 100}%
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Response Rate
+                  </span>
+                </div>
+
+                <div className="h-12 w-px bg-teal-200 hidden sm:block" />
+
+                <div className="space-y-1 text-xs text-slate-700">
+                  <div>
+                    <strong>{metrics.casesWithResponses ?? 0}</strong> of <strong>{metrics.publishedCaseStudies}</strong> cases answered
+                  </div>
+                  <div>
+                    <strong>{metrics.totalResponses ?? 0}</strong> total specialist responses
+                  </div>
+                  <div>
+                    <strong>{metrics.totalConnections ?? 0}</strong> peer connections formed
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -212,6 +257,7 @@ export default function AdminDashboardPage() {
               <p className="text-[11px] text-slate-400 mt-1">Active departmental forums</p>
             </div>
           </div>
+        </div>
         ) : null}
 
         {/* Operational Modules Grid */}

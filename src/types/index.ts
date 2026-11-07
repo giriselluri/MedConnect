@@ -78,11 +78,28 @@ export interface Comment {
   updated_at: string;
 }
 
+export interface CaseResponse {
+  id: string;
+  case_study_id: string;
+  author_id: string;
+  author: Profile;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  author_name?: string;
+  author_title?: string;
+  author_avatar_url?: string;
+  author_institution?: string;
+}
+
 export interface CaseStudy {
   id: string;
   title: string;
   short_summary: string;
   educational_content: string;
+  clinical_background?: string;
+  clinical_findings?: string;
+  question_for_specialists?: string;
   learning_objectives: string[];
   source_references: string[];
   author_id?: string;
@@ -106,6 +123,8 @@ export interface CaseStudy {
   created_at: string;
   updated_at: string;
   is_bookmarked?: boolean;
+  responses_count?: number;
+  responses?: CaseResponse[];
 }
 
 export interface Group {
@@ -270,10 +289,80 @@ export interface AdminMetrics {
   publishedCaseStudies: number;
   draftCaseStudies: number;
   archivedCaseStudies: number;
+  casesWithResponses: number;
+  responseRatePercent: number;
+  totalResponses: number;
+  totalConnections: number;
   totalGroups: number;
   pendingReports: number;
   totalJobs: number;
   activeJobs: number;
   totalAds: number;
   activeAds: number;
+}
+
+export interface CaseAssistantResult {
+  title: string;
+  suggested_specialties: string[];
+  suggestedSpecialtyIds?: string[];
+  anonymised_summary: string;
+  shortSummary?: string;
+  clinical_background: string;
+  clinicalBackground?: string;
+  clinical_findings: string;
+  clinicalFindings?: string;
+  question_for_specialists: string;
+  questionForSpecialists?: string;
+  learning_objectives: string[];
+  learningObjectives?: string[];
+  phi_risk_detected: boolean;
+  phiFound?: boolean;
+  phi_warnings: string[];
+  phiWarnings?: string[];
+  model_used: string;
+}
+
+export interface PubMedArticle {
+  pmid: string;
+  title: string;
+  authors: string[];
+  journal: string;
+  pub_date: string;
+  pubdate?: string;
+  doi?: string;
+  url: string;
+  abstract?: string;
+}
+
+export interface PubMedSearchResult {
+  query: string;
+  total_found: number;
+  articles: PubMedArticle[];
+  synthesis?: string;
+  ai_synthesis?: {
+    overview: string;
+    key_findings: string[];
+    clinical_implications: string;
+    consensus_summary: string;
+    limitations: string;
+  };
+  disclaimer: string;
+  source: 'ncbi-pubmed-api' | 'verified-clinical-cache';
+  model_used?: string;
+}
+
+export interface DiscussionSummaryResult {
+  overview: string;
+  executive_summary?: string;
+  consensus_points: string[];
+  clinical_consensus?: string[];
+  differing_perspectives: string[];
+  unanswered_questions: string[];
+  contributing_specialists: {
+    name: string;
+    title?: string;
+    institution?: string;
+  }[];
+  disclaimer: string;
+  model_used: string;
 }
