@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
+import { trackAppEvent } from '@/lib/analytics';
 import { Group, Connection, Profile } from '@/types';
 import {
   ArrowLeft,
@@ -32,6 +33,7 @@ import {
 export default function CreateCaseStudyPage() {
   const router = useRouter();
   const { currentUser, specialties } = useApp();
+  const [mountTime] = useState<number>(() => Date.now());
 
   // Basic Case Fields
   const [title, setTitle] = useState('');
@@ -174,6 +176,15 @@ export default function CreateCaseStudyPage() {
         throw new Error(data.error || 'Failed to generate case draft');
       }
       setAiAssistantDraft(data.draft);
+      trackAppEvent(
+        'ai_case_assistant_used',
+        {
+          notes_length: roughNotes.trim().length,
+          suggested_specialties_count: (data.draft?.suggestedSpecialtyIds || []).length,
+          phi_risk: Boolean(data.draft?.phiFound || data.draft?.phi_risk_detected),
+        },
+        Boolean(currentUser?.is_demo)
+      );
     } catch (e: any) {
       setAiAssistantError(e.message || 'Error running AI Case Study Assistant');
     } finally {
@@ -256,6 +267,19 @@ export default function CreateCaseStudyPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to create case study');
       }
+
+      const durationSeconds = Math.round((Date.now() - mountTime) / 1000);
+      trackAppEvent(
+        'case_created',
+        {
+          case_id: data.caseStudy?.id,
+          status: submitStatus,
+          duration_sec: durationSeconds,
+          specialties_count: selectedSpecialties.length,
+          is_private: isPrivate,
+        },
+        Boolean(currentUser?.is_demo)
+      );
 
       router.push(`/case-studies/${data.caseStudy.id}`);
     } catch (err: any) {

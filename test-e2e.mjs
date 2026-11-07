@@ -1232,6 +1232,21 @@ async function runTests() {
     assert(Boolean(caseResponseNotif), 'GP received in-app notification when specialist responded to their case');
     assert(Boolean(caseResponseNotif?.message?.includes('Marcus Chen')), 'Notification indicates specialist author name');
 
+    // Step D2: AI Specialist Matching
+    console.log('\n--- 14.5. Testing AI Specialist Matching ---');
+    const matchingRes = await request('/api/ai/specialist-matching', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseStudyId: gpCaseId }),
+    });
+    assert(matchingRes.ok && matchingRes.data.success, 'AI Specialist Matching API returns 200 OK');
+    assert(Array.isArray(matchingRes.data.recommendations) && matchingRes.data.recommendations.length > 0, `Recommended ${matchingRes.data.recommendations?.length} specialists matching case specialty`);
+    const topMatch = matchingRes.data.recommendations[0];
+    assert(typeof topMatch.match_score === 'number' && topMatch.match_score >= 50, `Top specialist match score: ${topMatch.match_score}%`);
+    assert(Array.isArray(topMatch.match_reasons) && topMatch.match_reasons.length > 0, 'Match reasons clearly state declared specialty/expertise criteria');
+    assert(Boolean(topMatch.relevance_explanation), 'Transparent clinical relevance explanation provided');
+    assert(Boolean(matchingRes.data.disclaimer), 'Safety disclaimer present on specialist matching');
+
     // Step E: AI Discussion Summariser
     const summaryRes = await request('/api/ai/discussion-summary', {
       method: 'POST',

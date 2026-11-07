@@ -3,9 +3,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
-import { Profile, Post } from '@/types';
+import { Profile, Post, CaseStudy } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { PostCard } from '@/components/post-card';
+import { CaseStudyCard } from '@/components/case-study-card';
 import { trackAppEvent } from '@/lib/analytics';
 import {
   Building2,
@@ -30,6 +31,8 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
   const { currentUser, specialties, refreshSession, isDemoUser } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
+  const [activeProfileTab, setActiveProfileTab] = useState<'cases' | 'posts'>('cases');
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,10 +56,11 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
     setIsLoading(true);
     setError(null);
     try {
-      const [profRes, postsRes, followRes] = await Promise.all([
+      const [profRes, postsRes, followRes, casesRes] = await Promise.all([
         fetch(`/api/profiles/${params.id}`),
         fetch(`/api/posts`),
         fetch(`/api/profiles/${params.id}/follow`),
+        fetch(`/api/case-studies`),
       ]);
 
       if (!profRes.ok) throw new Error('Profile not found');
@@ -72,6 +76,12 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
         const postsData = await postsRes.json();
         const userPosts = (postsData.posts || []).filter((p: Post) => p.author_id === params.id);
         setPosts(userPosts);
+      }
+
+      if (casesRes.ok) {
+        const casesData = await casesRes.json();
+        const userCases = (casesData.caseStudies || []).filter((c: CaseStudy) => c.author_id === params.id);
+        setCaseStudies(userCases);
       }
 
       if (followRes.ok) {
@@ -399,10 +409,12 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
             </div>
           )}
 
-          {/* Synthetic Profile Notice as required by Section 5 */}
-          <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400 italic">
-            Notice: Fictional clinician profile generated for professional educational simulation and product testing.
-          </div>
+          {/* Synthetic Demo Notice only for demo profiles */}
+          {profile.is_demo && (
+            <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400 italic">
+              Notice: Educational demonstration profile created for platform evaluation and clinical testing.
+            </div>
+          )}
         </div>
       </div>
 
@@ -449,18 +461,55 @@ export default function UserProfilePage({ params }: { params: { id: string } }) 
         </div>
       </div>
 
-      {/* Clinician's Posts Feed */}
+      {/* Clinician's Clinical Cases & Publications */}
       <div className="space-y-4">
-        <h3 className="font-bold text-slate-900 text-sm">
-          Publications & Clinical Insights ({posts.length})
-        </h3>
+        <div className="bg-white rounded-2xl border border-slate-200 p-1 flex items-center gap-1 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setActiveProfileTab('cases')}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+              activeProfileTab === 'cases'
+                ? 'bg-teal-700 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Clinical Case Studies ({caseStudies.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveProfileTab('posts')}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+              activeProfileTab === 'posts'
+                ? 'bg-teal-700 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Publications & Insights ({posts.length})</span>
+          </button>
+        </div>
 
-        {posts.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-xs text-slate-400">
-            No published posts from this clinician yet.
-          </div>
+        {activeProfileTab === 'cases' ? (
+          caseStudies.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-400">
+              No published clinical case studies authored by this clinician yet.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {caseStudies.map((cs) => (
+                <CaseStudyCard key={cs.id} caseStudy={cs} />
+              ))}
+            </div>
+          )
         ) : (
-          posts.map((post) => <PostCard key={post.id} post={post} />)
+          posts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-400">
+              No published insights or posts from this clinician yet.
+            </div>
+          ) : (
+            posts.map((post) => <PostCard key={post.id} post={post} />)
+          )
         )}
       </div>
     </div>

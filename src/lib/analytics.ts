@@ -6,7 +6,15 @@ export type AnalyticsEventName =
   | 'profile_completed'
   | 'post_created'
   | 'connection_requested'
-  | 'ai_research_assistant_used';
+  | 'ai_research_assistant_used'
+  | 'case_creation_started'
+  | 'case_created'
+  | 'case_response_submitted'
+  | 'specialist_search_performed'
+  | 'ai_case_assistant_used'
+  | 'ai_specialist_matching_used'
+  | 'ai_discussion_summary_used'
+  | 'case_shared_with_peer';
 
 export type AnalyticsPropertyValue = string | number | boolean | null;
 

@@ -36,7 +36,7 @@ export default function FeedPage() {
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
   const [jobs, setJobs] = useState<JobListing[]>([]);
   const [ads, setAds] = useState<Advertisement[]>([]);
-  const [activeTab, setActiveTab] = useState<'consultations' | 'posts'>('consultations');
+  const [activeTab, setActiveTab] = useState<'consultations' | 'my-discussions' | 'posts'>('consultations');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +116,11 @@ export default function FeedPage() {
     ? caseStudies.filter((c) => (c.specialties || []).some((s) => s.id === activeSpecialty))
     : caseStudies;
 
+  // Case discussions user has authored or participated in
+  const myDiscussions = caseStudies.filter(
+    (c) => c.author_id === currentUser?.id || c.responses?.some((r) => r.author_id === currentUser?.id)
+  );
+
   const filteredJobs = activeSpecialty
     ? jobs.filter((j) => j.specialty_id === activeSpecialty)
     : jobs;
@@ -141,73 +146,99 @@ export default function FeedPage() {
 
         {/* Center Feed (Col 4-8 on desktop) */}
         <div className="lg:col-span-6 space-y-4">
-          {/* Refocused Doctor Primary Actions: Find Specialists, Share a Case, My Network */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Refocused Doctor Primary Actions: Find a Specialist, Share a Case, My Discussions, My Network */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Link
               href="/network"
-              className="bg-white hover:bg-teal-50/50 p-4 rounded-2xl border border-slate-200 hover:border-teal-400 transition shadow-xs group flex flex-col justify-between"
+              className="bg-white hover:bg-teal-50/50 p-3.5 sm:p-4 rounded-2xl border border-slate-200 hover:border-teal-400 transition shadow-xs group flex flex-col justify-between"
             >
               <div>
-                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
-                  <Users className="w-5 h-5 text-teal-700" />
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-teal-700" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 group-hover:text-teal-800 transition">
-                  Find Specialists
+                  Find a Specialist
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  Discover specialists by expertise & hospital.
+                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">
+                  Discover by specialty & hospital.
                 </p>
               </div>
-              <div className="mt-3 flex items-center gap-1 text-[11px] font-bold text-teal-700">
-                <span>Browse Directory</span>
+              <div className="mt-2.5 flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-teal-700">
+                <span>Directory</span>
                 <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
               </div>
             </Link>
 
             <Link
               href="/case-studies/new"
-              className="bg-gradient-to-br from-teal-700 to-teal-900 p-4 rounded-2xl text-white shadow-xs group flex flex-col justify-between hover:shadow-md transition"
+              className="bg-gradient-to-br from-teal-700 to-teal-900 p-3.5 sm:p-4 rounded-2xl text-white shadow-xs group flex flex-col justify-between hover:shadow-md transition"
             >
               <div>
-                <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
-                  <BookOpen className="w-5 h-5" />
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/20 text-white flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <h3 className="text-xs font-bold text-white">
-                  Share a Clinical Case
+                  Share a Case
                 </h3>
-                <p className="text-[11px] text-teal-100 mt-0.5 leading-snug">
-                  Get specialist input on complex patient cases.
+                <p className="text-[10px] sm:text-[11px] text-teal-100 mt-0.5 leading-snug line-clamp-2">
+                  Seek specialist input with AI prep.
                 </p>
               </div>
-              <div className="mt-3 flex items-center gap-1 text-[11px] font-bold text-teal-200">
-                <span>Author Case</span>
+              <div className="mt-2.5 flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-teal-200">
+                <span>Author</span>
                 <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
               </div>
             </Link>
 
-            <Link
-              href="/network"
-              className="bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-slate-300 transition shadow-xs group flex flex-col justify-between"
+            <button
+              type="button"
+              onClick={() => setActiveTab('my-discussions')}
+              className={`p-3.5 sm:p-4 rounded-2xl border transition shadow-xs group flex flex-col justify-between text-left ${
+                activeTab === 'my-discussions'
+                  ? 'bg-teal-50 border-teal-500'
+                  : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
+              }`}
             >
               <div>
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
-                  <UserCheck className="w-5 h-5 text-slate-700" />
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-teal-700" />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 group-hover:text-teal-800 transition">
+                  My Discussions
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">
+                  Track your cases & specialist inputs.
+                </p>
+              </div>
+              <div className="mt-2.5 flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-teal-700">
+                <span>View ({myDiscussions.length})</span>
+                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
+              </div>
+            </button>
+
+            <Link
+              href="/network?tab=connections"
+              className="bg-white hover:bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200 hover:border-slate-300 transition shadow-xs group flex flex-col justify-between"
+            >
+              <div>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center mb-2.5 group-hover:scale-105 transition">
+                  <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 group-hover:text-slate-800 transition">
                   My Network
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  Manage colleagues & clinical consultations.
+                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">
+                  Colleagues & consultations.
                 </p>
               </div>
-              <div className="mt-3 flex items-center gap-1 text-[11px] font-bold text-slate-700">
-                <span>Manage Connections</span>
+              <div className="mt-2.5 flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-slate-700">
+                <span>Network</span>
                 <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
               </div>
             </Link>
           </div>
 
-          {/* Activity Mode Switcher: Specialist Case Consultations vs Peer Posts */}
+          {/* Activity Mode Switcher: Specialist Case Consultations vs My Discussions vs Peer Posts */}
           <div className="bg-white rounded-2xl border border-slate-200 p-1 flex items-center gap-1 shadow-2xs">
             <button
               type="button"
@@ -219,7 +250,23 @@ export default function FeedPage() {
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Specialist Consultations ({filteredCaseStudies.length})</span>
+              <span className="hidden sm:inline">Specialist Consultations</span>
+              <span className="sm:hidden">Consults</span>
+              <span>({filteredCaseStudies.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('my-discussions')}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                activeTab === 'my-discussions'
+                  ? 'bg-teal-700 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">My Discussions</span>
+              <span className="sm:hidden">My Cases</span>
+              <span>({myDiscussions.length})</span>
             </button>
             <button
               type="button"
@@ -230,8 +277,10 @@ export default function FeedPage() {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Peer Discussions ({filteredPosts.length})</span>
+              <Users className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Peer Discussions</span>
+              <span className="sm:hidden">Posts</span>
+              <span>({filteredPosts.length})</span>
             </button>
           </div>
 
@@ -335,6 +384,48 @@ export default function FeedPage() {
             ) : (
               <div className="space-y-4">
                 {filteredCaseStudies.map((cs) => (
+                  <CaseStudyCard
+                    key={cs.id}
+                    caseStudy={cs}
+                    onSpecialtyClick={(sId) => setActiveSpecialty(sId)}
+                  />
+                ))}
+              </div>
+            )
+          ) : activeTab === 'my-discussions' ? (
+            /* My Discussions View (Authored or Contributed Cases) */
+            myDiscussions.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3 shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 mx-auto">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-900 text-base">
+                  No case discussions initiated yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  You have not authored or contributed specialist input to any clinical consultations yet. Share an anonymised patient case to get expert peer opinions, or explore open consultations.
+                </p>
+                <div className="pt-2 flex items-center justify-center gap-2">
+                  <Link
+                    href="/case-studies/new"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Share a Clinical Case</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('consultations')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Explore Open Consultations</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {myDiscussions.map((cs) => (
                   <CaseStudyCard
                     key={cs.id}
                     caseStudy={cs}

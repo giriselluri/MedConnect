@@ -5,6 +5,10 @@ import {
   PubMedSearchResult,
   DiscussionSummaryResult,
   CaseResponse,
+  SpecialistRecommendation,
+  SpecialistMatchingResult,
+  Profile,
+  Specialty,
 } from '@/types';
 
 export interface StructuredResearchSummary {
@@ -731,5 +735,244 @@ function generateClinicalFallback(text: string, title?: string): StructuredResea
     relevant_keywords: uniqueKeywords.length > 0 ? uniqueKeywords : ['clinical-research', 'therapeutics', 'outcomes', 'biomarkers', 'evidence-based'],
     disclaimer: 'This analysis is an AI-assisted synthesis based solely on the provided text. It is intended for peer academic discussion and does not constitute clinical diagnostic or treatment advice.',
     model_used: 'clinical-heuristic-fallback',
+  };
+}
+
+// ------------------------------------------------------------------------------
+// 5. AI Specialist Matching: Match cases with verified specialists by declared expertise
+// ------------------------------------------------------------------------------
+export async function generateSpecialistRecommendations(
+  caseStudy: {
+    id?: string;
+    title: string;
+    clinical_background?: string;
+    clinical_findings?: string;
+    question_for_specialists?: string;
+    short_summary?: string;
+    educational_content?: string;
+    specialties: (Specialty | { id: string; name: string })[];
+  },
+  availableProfiles: Profile[]
+): Promise<SpecialistMatchingResult> {
+  const targetSpecialtyIds = (caseStudy.specialties || []).map((s) => s.id?.toLowerCase()).filter(Boolean);
+  const targetSpecialtyNames = (caseStudy.specialties || []).map((s) => s.name?.toLowerCase()).filter(Boolean);
+
+  const caseKeywords = [
+    caseStudy.title,
+    caseStudy.clinical_background || '',
+    caseStudy.clinical_findings || '',
+    caseStudy.question_for_specialists || '',
+    caseStudy.short_summary || '',
+  ]
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 4 && !['patient', 'presented', 'clinical', 'history', 'management', 'specialist', 'examination'].includes(w));
+
+  const uniqueCaseKeywords = Array.from(new Set(caseKeywords)).slice(0, 15);
+
+  // Filter candidates to clinical professionals
+  const validCandidates = availableProfiles.filter(
+    (p) => p.role === 'healthcare_professional' || p.role === 'researcher' || p.title?.toLowerCase().includes('dr') || p.title?.toLowerCase().includes('consultant') || p.title?.toLowerCase().includes('specialist')
+  );
+
+  // If Gemini API is available, ask Gemini to rank and explain based STRICTLY on declared attributes
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (apiKey && apiKey.trim().length > 0 && !apiKey.startsWith('AIzaSy_demo') && validCandidates.length > 0) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const candidateSummary = validCandidates.slice(0, 15).map((p) => ({
+        id: p.id,
+        name: p.full_name,
+        title: p.title,
+        institution: p.institution,
+        declared_specialties: (p.specialties || []).map((s) => s.name),
+        qualifications: p.qualifications,
+        interests: p.interests,
+        years_of_experience: p.years_of_experience,
+        is_verified: p.is_verified,
+      }));
+
+      const prompt = `
+You are a senior clinical director and specialist matching officer for MedConnect AI.
+A General Practitioner (GP) authored the following clinical case seeking specialist peer consultation:
+
+Case Title: "${caseStudy.title}"
+Case Specialties: ${targetSpecialtyNames.join(', ')}
+Clinical Background: "${caseStudy.clinical_background || caseStudy.short_summary || ''}"
+Question for Specialists: "${caseStudy.question_for_specialists || ''}"
+
+Candidate Specialists Pool:
+${JSON.stringify(candidateSummary, null, 2)}
+
+Instructions:
+1. Select the top 3-5 specialists who best match the case based on declared specialty, subspecialty, and professional expertise.
+2. For each recommended specialist, provide:
+   - "specialist_id": the candidate's exact id
+   - "match_score": an integer 60-98 representing relevance
+   - "match_reasons": 2-3 brief bullet points highlighting specific match factors (e.g. "Declared specialty: Cardiology", "Expressed clinical interest: Heart failure")
+   - "relevance_explanation": 2 sentences explaining why this specialist is suitable, referencing only their declared credentials.
+   - "matched_specialties": array of matching specialty names
+   - "matched_expertise": array of matching interest/subspecialty keywords
+3. STRICT SAFETY REQUIREMENT: Use ONLY the declared profile fields. Do NOT invent credentials, hospital affiliations, or unverified expertise.
+
+Respond ONLY with a JSON array:
+[
+  {
+    "specialist_id": "...",
+    "match_score": 92,
+    "match_reasons": ["..."],
+    "relevance_explanation": "...",
+    "matched_specialties": ["..."],
+    "matched_expertise": ["..."]
+  }
+]
+`;
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        },
+      });
+
+      const parsedArray: any[] = JSON.parse(result.response.text());
+      if (Array.isArray(parsedArray) && parsedArray.length > 0) {
+        const recommendations: SpecialistRecommendation[] = [];
+
+        for (const item of parsedArray) {
+          const profile = validCandidates.find((c) => c.id === item.specialist_id);
+          if (profile) {
+            recommendations.push({
+              specialist_id: profile.id,
+              specialist: profile,
+              match_score: typeof item.match_score === 'number' ? Math.min(99, Math.max(50, item.match_score)) : 85,
+              match_reasons: Array.isArray(item.match_reasons) && item.match_reasons.length > 0
+                ? item.match_reasons
+                : [`Declared specialty in ${(profile.specialties || []).map((s) => s.name).join(', ') || profile.title}`],
+              relevance_explanation: item.relevance_explanation || `Recommended based on declared specialty in ${(profile.specialties || []).map((s) => s.name).join(', ')} and clinical appointment at ${profile.institution || 'their medical institution'}.`,
+              matched_specialties: Array.isArray(item.matched_specialties) ? item.matched_specialties : [],
+              matched_expertise: Array.isArray(item.matched_expertise) ? item.matched_expertise : [],
+            });
+          }
+        }
+
+        if (recommendations.length > 0) {
+          recommendations.sort((a, b) => b.match_score - a.match_score);
+          return {
+            case_id: caseStudy.id,
+            case_title: caseStudy.title,
+            total_candidates_evaluated: validCandidates.length,
+            recommendations,
+            disclaimer: 'Specialist matches are computed from declared specialties, clinical interests, and professional appointments on MedConnect AI.',
+            model_used: 'gemini-1.5-flash',
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Gemini specialist matching failed, falling back to clinical heuristic:', e);
+    }
+  }
+
+  // Clinical heuristic fallback matching algorithm
+  const scoredCandidates: SpecialistRecommendation[] = [];
+
+  for (const candidate of validCandidates) {
+    let score = 50;
+    const matchReasons: string[] = [];
+    const matchedSpecialties: string[] = [];
+    const matchedExpertise: string[] = [];
+
+    // 1. Specialty overlap
+    const candSpecIds = (candidate.specialties || []).map((s) => s.id?.toLowerCase());
+    const candSpecNames = (candidate.specialties || []).map((s) => s.name?.toLowerCase());
+
+    const directSpecMatch = targetSpecialtyIds.some((tsId) => candSpecIds.includes(tsId)) ||
+      targetSpecialtyNames.some((tsName) => candSpecNames.includes(tsName));
+
+    if (directSpecMatch) {
+      score += 25;
+      const matchingSpecs = (candidate.specialties || [])
+        .filter((s) => targetSpecialtyIds.includes(s.id?.toLowerCase()) || targetSpecialtyNames.includes(s.name?.toLowerCase()))
+        .map((s) => s.name);
+      matchedSpecialties.push(...matchingSpecs);
+      matchReasons.push(`Declared specialty: ${matchingSpecs.join(', ')}`);
+    }
+
+    // 2. Title & Qualifications relevance
+    const titleLower = (candidate.title || '').toLowerCase();
+    const matchesTitle = targetSpecialtyNames.some((tsName) => titleLower.includes(tsName)) ||
+      uniqueCaseKeywords.some((kw) => titleLower.includes(kw));
+
+    if (matchesTitle) {
+      score += 12;
+      matchReasons.push(`Role relevance: ${candidate.title}`);
+    }
+
+    // 3. Clinical interests overlap
+    const candInterests = candidate.interests || [];
+    const matchedInts = candInterests.filter((interest) => {
+      const intLower = interest.toLowerCase();
+      return (
+        targetSpecialtyNames.some((ts) => intLower.includes(ts)) ||
+        uniqueCaseKeywords.some((kw) => intLower.includes(kw))
+      );
+    });
+
+    if (matchedInts.length > 0) {
+      score += Math.min(15, matchedInts.length * 6);
+      matchedExpertise.push(...matchedInts);
+      matchReasons.push(`Clinical interests: ${matchedInts.slice(0, 2).join(', ')}`);
+    }
+
+    // 4. Clinical experience & verification
+    if (candidate.is_verified) {
+      score += 4;
+    }
+    if (candidate.years_of_experience && candidate.years_of_experience >= 5) {
+      score += Math.min(6, Math.floor(candidate.years_of_experience / 3));
+    }
+
+    // Build transparent explanation using ONLY declared profile fields
+    const specText = matchedSpecialties.length > 0
+      ? `declared specialty in ${matchedSpecialties.join(' and ')}`
+      : candidate.title;
+    const interestText = matchedExpertise.length > 0
+      ? ` with stated focus on ${matchedExpertise.join(', ')}`
+      : '';
+    const instText = candidate.institution ? ` at ${candidate.institution}` : '';
+    const expText = candidate.years_of_experience ? ` with ${candidate.years_of_experience} years of clinical experience` : '';
+
+    const relevance_explanation = `${candidate.full_name} is recommended for this consultation based on their ${specText}${interestText}${instText}${expText}.`;
+
+    if (matchReasons.length === 0) {
+      matchReasons.push(`Clinical appointment: ${candidate.title || 'Attending Physician'}`);
+    }
+
+    scoredCandidates.push({
+      specialist_id: candidate.id,
+      specialist: candidate,
+      match_score: Math.min(96, score),
+      match_reasons: matchReasons.slice(0, 3),
+      relevance_explanation,
+      matched_specialties: matchedSpecialties,
+      matched_expertise: matchedExpertise,
+    });
+  }
+
+  // Sort descending by match score
+  scoredCandidates.sort((a, b) => b.match_score - a.match_score);
+
+  return {
+    case_id: caseStudy.id,
+    case_title: caseStudy.title,
+    total_candidates_evaluated: validCandidates.length,
+    recommendations: scoredCandidates.slice(0, 5),
+    disclaimer: 'Specialist matches are derived strictly from declared specialties, subspecialties, and clinical appointments on MedConnect AI. Credentials are not fabricated.',
+    model_used: 'clinical-heuristic-matcher',
   };
 }

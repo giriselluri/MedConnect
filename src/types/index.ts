@@ -366,3 +366,23 @@ export interface DiscussionSummaryResult {
   disclaimer: string;
   model_used: string;
 }
+
+export interface SpecialistRecommendation {
+  specialist_id: string;
+  specialist: Profile;
+  match_score: number; // 0 to 100
+  match_reasons: string[];
+  relevance_explanation: string;
+  matched_specialties: string[];
+  matched_expertise: string[];
+}
+
+export interface SpecialistMatchingResult {
+  case_id?: string;
+  case_title: string;
+  total_candidates_evaluated: number;
+  recommendations: SpecialistRecommendation[];
+  disclaimer: string;
+  model_used: string;
+}
+

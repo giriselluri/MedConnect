@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
-import { CaseStudy, Profile, CaseResponse, DiscussionSummaryResult } from '@/types';
+import { CaseStudy, Profile, CaseResponse, DiscussionSummaryResult, SpecialistRecommendation } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
+import { trackAppEvent } from '@/lib/analytics';
 import {
   ArrowLeft,
   Calendar,
@@ -34,6 +35,10 @@ import {
   MessageSquare,
   Stethoscope,
   HelpCircle,
+  Award,
+  ExternalLink,
+  ChevronRight,
+  UserCheck,
 } from 'lucide-react';
 
 export default function CaseStudyDetailPage({ params }: { params: { id: string } }) {
@@ -65,7 +70,45 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
+  // AI Specialist Matching State
+  const [matchingResult, setMatchingResult] = useState<SpecialistRecommendation[]>([]);
+  const [isLoadingMatching, setIsLoadingMatching] = useState(false);
+  const [matchingError, setMatchingError] = useState<string | null>(null);
+  const [matchingDisclaimer, setMatchingDisclaimer] = useState<string | null>(null);
+
   const isAdmin = Boolean((currentUser?.is_admin || currentUser?.role === 'admin') && isDemoUser);
+
+  const loadSpecialistMatches = async () => {
+    setIsLoadingMatching(true);
+    setMatchingError(null);
+    try {
+      const res = await fetch('/api/ai/specialist-matching', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseStudyId: params.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMatchingResult(data.recommendations || []);
+        setMatchingDisclaimer(data.disclaimer || null);
+        trackAppEvent(
+          'ai_specialist_matching_used',
+          {
+            case_id: params.id,
+            matches_count: (data.recommendations || []).length,
+          },
+          isDemoUser
+        );
+      } else {
+        const err = await res.json();
+        setMatchingError(err.error || 'Failed to match specialists');
+      }
+    } catch (e: any) {
+      setMatchingError(e.message || 'Error running specialist matching');
+    } finally {
+      setIsLoadingMatching(false);
+    }
+  };
 
   const loadResponses = async () => {
     setIsLoadingResponses(true);
@@ -98,6 +141,9 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
           setResponses(data.caseStudy.responses);
         } else {
           loadResponses();
+        }
+        if (!data.caseStudy.is_locked) {
+          loadSpecialistMatches();
         }
       } catch (e: any) {
         setError(e.message || 'Error loading case study');
@@ -133,6 +179,11 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
       setResponseSuccess('Your specialist response has been submitted! The case author was notified.');
       // Update caseStudy response count locally
       setCaseStudy((prev) => (prev ? { ...prev, responses_count: (prev.responses_count || 0) + 1 } : prev));
+      trackAppEvent(
+        'case_response_submitted',
+        { case_id: params.id },
+        isDemoUser
+      );
       setTimeout(() => setResponseSuccess(null), 4000);
     } catch (err: any) {
       setResponseError(err.message || 'Error submitting response');
@@ -155,6 +206,11 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
         throw new Error(data.error || 'Failed to generate discussion summary');
       }
       setDiscussionSummary(data.summary);
+      trackAppEvent(
+        'ai_discussion_summary_used',
+        { case_id: params.id, responses_count: responses.length },
+        isDemoUser
+      );
     } catch (err: any) {
       setSummaryError(err.message || 'Error summarizing discussion');
     } finally {
@@ -270,6 +326,11 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to share case study');
       setShareSuccessMsg('Case study shared successfully! In-app notification sent.');
+      trackAppEvent(
+        'case_shared_with_peer',
+        { case_id: params.id, recipient_id: peerId },
+        isDemoUser
+      );
       if (data.caseStudy) {
         setCaseStudy(data.caseStudy);
       }
@@ -633,6 +694,187 @@ export default function CaseStudyDetailPage({ params }: { params: { id: string }
           Disclaimer: This educational case study is a synthetic clinical example intended solely for professional peer education and diagnostic reasoning review. It does not contain protected health information (PHI) or identifiable patient details.
         </div>
       </article>
+
+      {/* AI Specialist Matching Section */}
+      <section className="bg-white rounded-2xl shadow-xs border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-200">
+              <Sparkles className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+                  Recommended Specialists for This Case
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-800">
+                  {matchingResult.length} Matches
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Matched based strictly on declared specialty, subspecialty expertise, and verified clinical appointments.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={isLoadingMatching}
+            onClick={loadSpecialistMatches}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+          >
+            {isLoadingMatching ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+            )}
+            <span>Refresh Matching</span>
+          </button>
+        </div>
+
+        {matchingError && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{matchingError}</span>
+          </div>
+        )}
+
+        {isLoadingMatching ? (
+          <div className="py-8 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+            <span>Analyzing clinical case parameters against verified specialists...</span>
+          </div>
+        ) : matchingResult.length === 0 ? (
+          <div className="p-6 bg-slate-50 rounded-2xl text-center space-y-2 border border-slate-200">
+            <UserCheck className="w-8 h-8 text-slate-400 mx-auto" />
+            <p className="text-xs font-semibold text-slate-700">No matching specialists found yet</p>
+            <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+              Explore the professional network directory or invite colleagues in this clinical discipline.
+            </p>
+            <Link
+              href="/network"
+              className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 hover:underline mt-1"
+            >
+              <span>Browse Full Specialist Directory</span>
+              <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {matchingResult.map((rec) => {
+              const spec = rec.specialist;
+              const isAlreadyShared = caseStudy.shared_with_user_ids?.includes(spec.id);
+              const isSharing = sharingWithId === spec.id;
+
+              return (
+                <div
+                  key={rec.specialist_id}
+                  className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-teal-300 transition shadow-2xs space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link
+                        href={`/profile/${spec.id}`}
+                        className="flex items-center gap-2.5 group min-w-0"
+                      >
+                        <img
+                          src={
+                            spec.avatar_url ||
+                            `https://ui-avatars.com/api/?name=${encodeURIComponent(spec.full_name)}&background=0d9488&color=fff&bold=true`
+                          }
+                          alt={spec.full_name}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:ring-2 group-hover:ring-teal-500 transition flex-shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 group-hover:text-teal-700 transition truncate">
+                              {spec.full_name}
+                            </span>
+                            {spec.is_verified && (
+                              <span className="p-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px]">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 block truncate">
+                            {spec.title || 'Specialist Physician'}
+                            {spec.institution ? ` • ${spec.institution}` : ''}
+                          </span>
+                        </div>
+                      </Link>
+
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex-shrink-0">
+                        {rec.match_score}% Match
+                      </span>
+                    </div>
+
+                    {/* Match Reasons Badges */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {rec.match_reasons.map((reason, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200"
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Relevance Explanation */}
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-700 leading-snug">
+                      <p className="font-semibold text-slate-900 text-[10px] uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-teal-600" />
+                        <span>Why Recommended</span>
+                      </p>
+                      {rec.relevance_explanation}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <Link
+                      href={`/profile/${spec.id}`}
+                      className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1"
+                    >
+                      <span>View Profile</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
+
+                    {canSharePrivately && (
+                      isAlreadyShared ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                          <Check className="w-3 h-3" />
+                          <span>Case Shared</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isSharing}
+                          onClick={() => handleShareWithPeer(spec.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition"
+                        >
+                          {isSharing ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Send className="w-3 h-3" />
+                          )}
+                          <span>Share Case</span>
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {matchingDisclaimer && (
+          <div className="border-t border-slate-100 pt-3 text-[10px] text-slate-400 leading-relaxed italic">
+            {matchingDisclaimer}
+          </div>
+        )}
+      </section>
 
       {/* Specialist Responses & Clinical Discussion Section */}
       <section className="bg-white rounded-2xl shadow-xs border border-slate-200 p-6 sm:p-8 space-y-6">

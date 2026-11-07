@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { Profile, Connection } from '@/types';
 import { SpecialtyBadge } from '@/components/specialty-badge';
@@ -23,9 +24,13 @@ import {
   Loader2,
 } from 'lucide-react';
 
-export default function NetworkPage() {
+function NetworkContent() {
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get('tab') as 'directory' | 'connections' | 'invitations') || 'directory';
+  const initialSpecialty = searchParams.get('specialty') || '';
+
   const { currentUser, specialties, isDemoUser } = useApp();
-  const [activeTab, setActiveTab] = useState<'directory' | 'connections' | 'invitations'>('directory');
+  const [activeTab, setActiveTab] = useState<'directory' | 'connections' | 'invitations'>(initialTab);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingIncoming, setPendingIncoming] = useState<Connection[]>([]);
@@ -33,8 +38,15 @@ export default function NetworkPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [specialtyFilter, setSpecialtyFilter] = useState('');
+  const [specialtyFilter, setSpecialtyFilter] = useState(initialSpecialty);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'connections' || tabParam === 'invitations' || tabParam === 'directory') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   const loadNetworkData = async () => {
     setIsLoading(true);
@@ -512,5 +524,20 @@ export default function NetworkPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NetworkPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto mb-2" />
+          <p className="text-xs text-slate-500 font-medium">Loading specialist directory...</p>
+        </div>
+      }
+    >
+      <NetworkContent />
+    </React.Suspense>
   );
 }
